@@ -1,3 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">white</string>
+    <string name="app_name">White</string>
+    <string name="library_title">My Library</string>
+    <string name="empty_title">Your shelf is empty</string>
+    <string name="empty_subtitle">Tap + to add an EPUB</string>
+    <string name="add_book">Add book</string>
+    <string name="importing">Opening book…</string>
+    <string name="import_failed">That file could not be opened as an EPUB</string>
+    <string name="remove_failed">Could not remove book from library</string>
+    <string name="remove_book_message">This deletes the saved copy of this book from White.</string>
+    <string name="cancel">Cancel</string>
+    <string name="remove">Remove</string>
+    <string name="progress_percent">%1$d%%</string>
+    <string name="unknown_author">Unknown Author</string>
+    <plurals name="book_count">
+        <item quantity="one">%1$d book</item>
+        <item quantity="other">%1$d books</item>
+    </plurals>
 </resources>
+

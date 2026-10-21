@@ -3,6 +3,7 @@
 *.aar
 *.ap_
 *.aab
+dist/
 
 # Files for the ART/Dalvik VM
 *.dex
@@ -17,8 +18,9 @@ out/
 build/
 */build/
 
-# Gradle files
+# Gradle & Kotlin files
 .gradle/
+.kotlin/
 
 # Local configuration file (SDK paths, local properties)
 local.properties
@@ -26,8 +28,9 @@ local.properties
 # Proguard / R8 mappings
 proguard/
 
-# Log Files
+# Log & crash files
 *.log
+*.hprof
 
 # Android Studio / IntelliJ IDEA
 *.iml
@@ -42,6 +45,14 @@ captures/
 # External native build folder
 .externalNativeBuild
 .cxx/
+
+# Local agent & ephemeral test artifacts (per feature-development Rule 2)
+.agents/
+app/src/test/
+app/src/androidTest/
+*.test.*
+*.spec.*
+__tests__/
 
 # OS-specific / environment files
 .DS_Store
