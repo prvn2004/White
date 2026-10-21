@@ -23,10 +23,15 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import open.source.white.R
 import open.source.white.common.AppConstants
 import open.source.white.data.BookRepository
 import open.source.white.model.Book
+import open.source.white.parser.EpubParser
 import java.io.File
 import java.io.FileInputStream
 
@@ -55,8 +60,7 @@ class ReaderActivity : AppCompatActivity() {
         repository = BookRepository.getInstance(this)
         val bookId = intent.getStringExtra(AppConstants.EXTRA_BOOK_ID)
         val loaded = if (bookId == null) null else repository.getBook(bookId)
-        val htmlFile = if (loaded == null) null else File(loaded.readerHtmlPath)
-        if (loaded == null || htmlFile == null || !htmlFile.exists()) {
+        if (loaded == null) {
             repository.setLastOpenedBookId(null)
             finish()
             return
@@ -74,16 +78,45 @@ class ReaderActivity : AppCompatActivity() {
         )
 
         webView = findViewById(R.id.readerWebView)
-        configureWebView(htmlFile)
+        configureWebView()
 
         repository.setLastOpenedBookId(book.id)
-        webView.loadUrl(AppConstants.VIRTUAL_READER_URL)
+        loadBookIntoWebView()
 
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
                 exitToBookshelf()
             }
         })
+    }
+
+    private fun loadBookIntoWebView() {
+        lifecycleScope.launch {
+            val page: String? = withContext(Dispatchers.IO) {
+                val readyFile = EpubParser.ensureReaderHtmlReady(book)
+                if (readyFile == null || !readyFile.exists() || readyFile.length() == 0L) {
+                    null
+                } else {
+                    try {
+                        readyFile.readText(Charsets.UTF_8)
+                    } catch (error: Exception) {
+                        null
+                    }
+                }
+            }
+            if (page.isNullOrBlank()) {
+                repository.setLastOpenedBookId(null)
+                finish()
+                return@launch
+            }
+            webView.loadDataWithBaseURL(
+                AppConstants.VIRTUAL_ASSET_ORIGIN,
+                page,
+                AppConstants.MIME_HTML,
+                "UTF-8",
+                null
+            )
+        }
     }
 
     private fun exitToBookshelf() {
@@ -114,7 +147,7 @@ class ReaderActivity : AppCompatActivity() {
     }
 
     @SuppressLint("SetJavaScriptEnabled")
-    private fun configureWebView(readerHtmlFile: File) {
+    private fun configureWebView() {
         webView.setBackgroundColor(Color.WHITE)
         webView.isVerticalScrollBarEnabled = false
         webView.isHorizontalScrollBarEnabled = false
@@ -134,7 +167,7 @@ class ReaderActivity : AppCompatActivity() {
         webView.addJavascriptInterface(Bridge(), AppConstants.JS_BRIDGE_NAME)
         webView.webViewClient = ReaderClient(
             root = File(book.unpackedDirPath),
-            readerHtmlFile = readerHtmlFile
+            readerHtmlFile = File(book.readerHtmlPath)
         )
     }
 
@@ -261,7 +294,12 @@ class ReaderActivity : AppCompatActivity() {
             return try {
                 val canonicalRoot = root.canonicalFile
                 val rootPath = canonicalRoot.canonicalPath
-                val file = File(canonicalRoot, rawPath).canonicalFile
+                val decodedPath = try {
+                    Uri.decode(rawPath)
+                } catch (error: Exception) {
+                    rawPath
+                }
+                val file = File(canonicalRoot, decodedPath).canonicalFile
                 val isInsideRoot = file.canonicalPath == rootPath ||
                     file.canonicalPath.startsWith(rootPath + File.separator)
                 if (!isInsideRoot || !file.exists() || !file.isFile) {
@@ -280,6 +318,7 @@ class ReaderActivity : AppCompatActivity() {
                 "png" -> AppConstants.MIME_PNG
                 "gif" -> AppConstants.MIME_GIF
                 "webp" -> AppConstants.MIME_WEBP
+                "svg" -> AppConstants.MIME_SVG
                 "bmp" -> AppConstants.MIME_BMP
                 "css" -> AppConstants.MIME_CSS
                 "ttf" -> AppConstants.MIME_TTF

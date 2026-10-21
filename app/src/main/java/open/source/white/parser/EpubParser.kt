@@ -8,11 +8,11 @@ import open.source.white.model.Book
 import org.w3c.dom.Document
 import org.w3c.dom.Element
 import org.w3c.dom.Node
+import org.w3c.dom.NodeList
 import java.io.ByteArrayInputStream
 import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
-import java.net.URLDecoder
 import java.nio.charset.Charset
 import java.security.SecureRandom
 import java.util.UUID
@@ -46,11 +46,11 @@ object EpubParser {
         "table", "thead", "tbody", "tfoot", "tr", "td", "th", "caption",
         "br", "hr", "em", "strong", "i", "b", "u", "s", "sub", "sup", "small",
         "mark", "q", "cite", "abbr", "figure", "figcaption", "img", "a",
-        "svg", "g", "path", "rect", "circle", "ellipse", "line", "polyline", "polygon", "text", "image",
+        "text", "image",
         "math", "mrow", "mi", "mn", "mo", "msup", "msub", "msubsup", "mfrac", "msqrt", "mroot", "mtext"
     )
 
-    private val VOID_TAGS = setOf("br", "hr", "img", "path", "rect", "circle", "ellipse", "line", "polyline", "polygon", "image")
+    private val VOID_TAGS = setOf("br", "hr", "img", "image")
 
     private val ALLOWED_ATTRS = setOf(
         "id", "class", "src", "href", "alt", "title", "colspan", "rowspan", "dir", "lang",
@@ -80,6 +80,42 @@ object EpubParser {
         }
     }
 
+    fun ensureReaderHtmlReady(book: Book): File? {
+        val readerFile = File(book.readerHtmlPath)
+        val unpackedDir = File(book.unpackedDirPath)
+        if (readerFile.exists() && readerFile.length() > 0L) {
+            val existing = try {
+                readerFile.readText(Charsets.UTF_8)
+            } catch (error: Exception) {
+                ""
+            }
+            if (existing.contains("data-white-schema='2'") && existing.length > 1200) {
+                return readerFile
+            }
+        }
+        if (!unpackedDir.exists() || !unpackedDir.isDirectory) {
+            return if (readerFile.exists()) readerFile else null
+        }
+        return try {
+            val root = unpackedDir.canonicalFile
+            val opfFile = findOpfFile(root)
+            val chapterPaths = if (opfFile != null) {
+                val opfRelativePath = opfFile.relativeTo(root).invariantSeparatorsPath
+                val opfParentDir = parentDirOf(opfRelativePath)
+                val document = parseXmlDocument(opfFile)
+                val manifest = extractManifest(document)
+                extractChapterPaths(document, manifest, opfParentDir, root)
+            } else {
+                discoverHtmlFilesFallback(root)
+            }
+            if (chapterPaths.isEmpty()) return if (readerFile.exists()) readerFile else null
+            buildReaderHtml(root, chapterPaths, readerFile, book.title)
+            readerFile
+        } catch (error: Exception) {
+            if (readerFile.exists()) readerFile else null
+        }
+    }
+
     private fun copyUriToFile(context: Context, uri: Uri, target: File) {
         val input = context.contentResolver.openInputStream(uri)
             ?: throw IllegalArgumentException(AppConstants.ERR_OPEN_STREAM)
@@ -105,21 +141,25 @@ object EpubParser {
         bookDir: File,
         unpackedDir: File
     ): Book {
-        val opfFile = findOpfFile(unpackedDir)
+        // Align on the canonical root: filesDir is /data/user/0/... while canonical paths
+        // resolve to /data/data/.... Mixing them makes File.relativeTo() emit ../../../data/...
+        // and every relative chapter or cover lookup fails.
+        val root = unpackedDir.canonicalFile
+        val opfFile = findOpfFile(root)
             ?: throw IllegalStateException(AppConstants.ERR_MISSING_OPF)
 
-        val opfRelativePath = unpackedDir.toURI().relativize(opfFile.toURI()).path
+        val opfRelativePath = opfFile.relativeTo(root).invariantSeparatorsPath
         val opfParentDir = parentDirOf(opfRelativePath)
 
         val document = parseXmlDocument(opfFile)
         val metadata = extractMetadata(document)
         val manifest = extractManifest(document)
         val coverItem = selectCoverItem(manifest, metadata.coverId)
-        val coverPath = copyCoverImage(coverItem, opfParentDir, unpackedDir, bookDir)
-        val chapterPaths = extractChapterPaths(document, manifest, opfParentDir)
+        val coverPath = copyCoverImage(coverItem, opfParentDir, root, bookDir)
+        val chapterPaths = extractChapterPaths(document, manifest, opfParentDir, root)
 
         val readerHtml = File(bookDir, AppConstants.READER_HTML_FILE)
-        buildReaderHtml(unpackedDir, chapterPaths, readerHtml, metadata.title)
+        buildReaderHtml(root, chapterPaths, readerHtml, metadata.title)
 
         return Book(
             id = bookId,
@@ -137,16 +177,30 @@ object EpubParser {
         }
         val bytes = file.readBytes()
         val decodedXml = decodeXmlForSafetyCheck(bytes)
-        if (decodedXml.indexOf(AppConstants.XML_DOCTYPE_MARKER, ignoreCase = true) >= 0 ||
-            decodedXml.indexOf(AppConstants.XML_ENTITY_MARKER, ignoreCase = true) >= 0
-        ) {
+        if (decodedXml.indexOf(AppConstants.XML_ENTITY_MARKER, ignoreCase = true) >= 0) {
             throw SecurityException(AppConstants.ERR_UNSAFE_XML)
         }
+        val cleanedXml = stripXmlDoctype(decodedXml)
         val factory = newSecureFactory()
         val builder = factory.newDocumentBuilder()
-        val document = builder.parse(ByteArrayInputStream(bytes))
+        val document = builder.parse(ByteArrayInputStream(cleanedXml.toByteArray(Charsets.UTF_8)))
         document.documentElement.normalize()
         return document
+    }
+
+    private fun stripXmlDoctype(xml: String): String {
+        var result = xml
+        if (result.startsWith("\uFEFF")) {
+            result = result.substring(1)
+        }
+        result = Regex("""(?is)<\?xml[^>]*\?>""").replaceFirst(result, "")
+        result = Regex("""(?is)<!DOCTYPE[^\[>]*(\[[^\]]*\])?\s*>""").replace(result) { match ->
+            if (match.value.contains(AppConstants.XML_ENTITY_MARKER, ignoreCase = true)) {
+                throw SecurityException(AppConstants.ERR_UNSAFE_XML)
+            }
+            ""
+        }
+        return result.trimStart()
     }
 
     private fun decodeXmlForSafetyCheck(bytes: ByteArray): String {
@@ -170,21 +224,35 @@ object EpubParser {
         return String(bytes, charset)
     }
 
+    private fun elementsByLocalName(parent: Element, localName: String): List<Element> {
+        val result = ArrayList<Element>()
+        val all: NodeList = parent.getElementsByTagName("*")
+        for (i in 0 until all.length) {
+            val node = all.item(i)
+            if (node.nodeType == Node.ELEMENT_NODE) {
+                val elem = node as Element
+                val name = (elem.localName ?: elem.tagName).substringAfterLast(':')
+                if (name.equals(localName, ignoreCase = true)) {
+                    result.add(elem)
+                }
+            }
+        }
+        return result
+    }
+
     private fun extractMetadata(document: Document): BookMetadata {
         var title = AppConstants.DEFAULT_TITLE
         var author = AppConstants.DEFAULT_AUTHOR
         var coverId: String? = null
 
-        val metadataNodes = document.getElementsByTagName("metadata")
-        if (metadataNodes.length == 0) {
-            return BookMetadata(title, author, coverId)
-        }
-        val children = metadataNodes.item(0).childNodes
+        val root = document.documentElement ?: return BookMetadata(title, author, coverId)
+        val metadataElement = elementsByLocalName(root, "metadata").firstOrNull() ?: root
+        val children = metadataElement.childNodes
         for (index in 0 until children.length) {
             val node = children.item(index)
             if (node.nodeType != Node.ELEMENT_NODE) continue
             val element = node as Element
-            val name = element.localName ?: element.tagName
+            val name = (element.localName ?: element.tagName).substringAfterLast(':')
             when {
                 name.equals("title", true) -> {
                     val text = element.textContent.trim()
@@ -219,17 +287,17 @@ object EpubParser {
 
     private fun extractManifest(document: Document): LinkedHashMap<String, ManifestItem> {
         val manifest = LinkedHashMap<String, ManifestItem>()
-        val manifestNodes = document.getElementsByTagName("manifest")
-        if (manifestNodes.length == 0) return manifest
-
-        val items = (manifestNodes.item(0) as Element).getElementsByTagName("item")
-        for (index in 0 until items.length) {
-            val item = items.item(index) as Element
+        val root = document.documentElement ?: return manifest
+        val manifestElem = elementsByLocalName(root, "manifest").firstOrNull() ?: root
+        val items = elementsByLocalName(manifestElem, "item")
+        for (item in items) {
             val id = item.getAttribute("id")
             val href = item.getAttribute("href")
             val mediaType = item.getAttribute("media-type")
             val properties = item.getAttribute("properties")
-            manifest[id] = ManifestItem(id, href, mediaType, properties)
+            if (id.isNotEmpty() && href.isNotEmpty()) {
+                manifest[id] = ManifestItem(id, href, mediaType, properties)
+            }
         }
         return manifest
     }
@@ -257,7 +325,7 @@ object EpubParser {
     ): String? {
         if (coverItem == null) return null
         return try {
-            val decoded = URLDecoder.decode(coverItem.href, "UTF-8")
+            val decoded = decodePercentPath(coverItem.href)
             val coverRelative = resolveRelativePath(opfParentDir, decoded)
             val coverSource = File(unpackedDir, coverRelative).canonicalFile
             if (!isInsideDirectory(coverSource, unpackedDir.canonicalFile)) return null
@@ -276,29 +344,59 @@ object EpubParser {
     private fun extractChapterPaths(
         document: Document,
         manifest: Map<String, ManifestItem>,
-        opfParentDir: String
+        opfParentDir: String,
+        unpackedDir: File
     ): List<String> {
         val chapterPaths = mutableListOf<String>()
-        val spineNodes = document.getElementsByTagName("spine")
-        if (spineNodes.length > 0) {
-            val itemRefs = (spineNodes.item(0) as Element).getElementsByTagName("itemref")
-            for (index in 0 until itemRefs.length) {
-                val itemRef = itemRefs.item(index) as Element
+        val root = document.documentElement
+        if (root != null) {
+            val spineElem = elementsByLocalName(root, "spine").firstOrNull() ?: root
+            val itemRefs = elementsByLocalName(spineElem, "itemref")
+            for (itemRef in itemRefs) {
                 val idRef = itemRef.getAttribute("idref")
                 val manifestItem = manifest[idRef] ?: continue
-                val decoded = URLDecoder.decode(manifestItem.href, "UTF-8")
-                chapterPaths.add(resolveRelativePath(opfParentDir, decoded))
+                val decoded = decodePercentPath(manifestItem.href)
+                val resolved = resolveRelativePath(opfParentDir, decoded)
+                if (resolved.isNotEmpty() && File(unpackedDir, resolved).exists()) {
+                    chapterPaths.add(resolved)
+                }
             }
         }
         if (chapterPaths.isNotEmpty()) return chapterPaths
 
         for (item in manifest.values) {
-            if (item.mediaType.contains("html", true)) {
-                val decoded = URLDecoder.decode(item.href, "UTF-8")
-                chapterPaths.add(resolveRelativePath(opfParentDir, decoded))
+            val ext = item.href.substringBefore('#').substringAfterLast('.', "").lowercase()
+            if (item.mediaType.contains("html", true) || ext in setOf("xhtml", "html", "htm")) {
+                val decoded = decodePercentPath(item.href)
+                val resolved = resolveRelativePath(opfParentDir, decoded)
+                if (resolved.isNotEmpty() && File(unpackedDir, resolved).exists()) {
+                    chapterPaths.add(resolved)
+                }
             }
         }
-        return chapterPaths
+        if (chapterPaths.isNotEmpty()) return chapterPaths
+
+        return discoverHtmlFilesFallback(unpackedDir)
+    }
+
+    private fun discoverHtmlFilesFallback(unpackedDir: File): List<String> {
+        return unpackedDir.walkTopDown()
+            .filter { file ->
+                file.isFile &&
+                    file.extension.lowercase() in setOf("xhtml", "html", "htm") &&
+                    !file.name.equals("toc.ncx", ignoreCase = true)
+            }
+            .map { it.relativeTo(unpackedDir).invariantSeparatorsPath }
+            .sorted()
+            .toList()
+    }
+
+    private fun decodePercentPath(raw: String): String {
+        return try {
+            Uri.decode(raw)
+        } catch (error: Exception) {
+            raw
+        }
     }
 
     private fun generateScriptNonce(): String {
@@ -416,7 +514,7 @@ object EpubParser {
   }
 </style>
 </head>
-<body>
+<body data-white-schema='2'>
 """)
 
         val chapterIndexMap = HashMap<String, Int>(chapterPaths.size)
@@ -543,6 +641,7 @@ object EpubParser {
             val raw = readChapterText(chapterFile)
             val body = extractBodyContent(raw)
             val sanitized = sanitizeAndRewriteHtml(body, baseDir, chapterIndexMap)
+            if (sanitized.isBlank()) continue
 
             html.append("<section class='epub-chapter' id='chapter-")
                 .append(index)
@@ -564,8 +663,7 @@ object EpubParser {
             return ""
         }
         if (bytes.isEmpty()) return ""
-        val charset = detectXmlCharset(bytes) ?: Charsets.UTF_8
-        return String(bytes, charset)
+        return decodeXmlForSafetyCheck(bytes)
     }
 
     private fun detectXmlCharset(bytes: ByteArray): Charset? {
@@ -595,12 +693,11 @@ object EpubParser {
     }
 
     private fun extractBodyContent(html: String): String {
-        val bodyStart = html.indexOf("<body", ignoreCase = true)
-        if (bodyStart < 0) return html
-        val tagEnd = html.indexOf('>', startIndex = bodyStart)
-        val bodyEnd = html.indexOf("</body", startIndex = bodyStart, ignoreCase = true)
-        if (tagEnd < 0 || bodyEnd < 0 || bodyEnd <= tagEnd) return html
-        return html.substring(tagEnd + 1, bodyEnd)
+        val bodyMatch = Regex("""(?is)<(?:\w+:)?body\b[^>]*>(.*?)</(?:\w+:)?body\s*>""").find(html)
+        if (bodyMatch != null) {
+            return bodyMatch.groupValues[1]
+        }
+        return html
     }
 
     private fun sanitizeAndRewriteHtml(
@@ -622,6 +719,16 @@ object EpubParser {
             if (html.startsWith("<!--", startIndex = lt)) {
                 val commentEnd = html.indexOf("-->", startIndex = lt + 4)
                 idx = if (commentEnd < 0) html.length else commentEnd + 3
+                continue
+            }
+            if (html.startsWith("<![CDATA[", startIndex = lt)) {
+                val cdataEnd = html.indexOf("]]>", startIndex = lt + 9)
+                if (cdataEnd < 0) {
+                    appendEscapedText(out, html, lt + 9, html.length)
+                    break
+                }
+                appendEscapedText(out, html, lt + 9, cdataEnd)
+                idx = cdataEnd + 3
                 continue
             }
             val gt = findTagEnd(html, lt + 1)
@@ -684,11 +791,20 @@ object EpubParser {
             }
             return afterTagIdx
         }
+        if (tagName == "image") {
+            val attrSegment = if (nameEnd < 0) "" else cleanBody.substring(nameEnd + 1)
+            out.append("<img")
+            appendSanitizedAttributes(attrSegment, baseDir, chapterIndexMap, out)
+            out.append("/>")
+            return afterTagIdx
+        }
         val attrSegment = if (nameEnd < 0) "" else cleanBody.substring(nameEnd + 1)
         out.append('<').append(tagName)
         appendSanitizedAttributes(attrSegment, baseDir, chapterIndexMap, out)
-        if (selfClosing || tagName in VOID_TAGS) {
+        if (tagName in VOID_TAGS) {
             out.append("/>")
+        } else if (selfClosing) {
+            out.append("></").append(tagName).append('>')
         } else {
             out.append('>')
         }
@@ -696,11 +812,9 @@ object EpubParser {
     }
 
     private fun skipDroppedSubtree(html: String, tagName: String, fromIndex: Int): Int {
-        val closeToken = "</$tagName"
-        val closeIdx = html.indexOf(closeToken, startIndex = fromIndex, ignoreCase = true)
-        if (closeIdx < 0) return html.length
-        val closeGt = html.indexOf('>', startIndex = closeIdx + closeToken.length)
-        return if (closeGt < 0) html.length else closeGt + 1
+        val closeRegex = Regex("""(?is)</(?:\w+:)?$tagName\s*>""")
+        val match = closeRegex.find(html, startIndex = fromIndex)
+        return match?.range?.last?.plus(1) ?: html.length
     }
 
     private fun appendSanitizedAttributes(
@@ -718,7 +832,7 @@ object EpubParser {
                 i += 1
             }
             val rawName = attrSegment.substring(nameStart, i).lowercase()
-            val attrName = if (rawName == "xlink:href") "href" else rawName
+            val attrName = if (rawName == "xlink:href") "src" else rawName
             while (i < attrSegment.length && attrSegment[i].isWhitespace()) i += 1
             if (i >= attrSegment.length || attrSegment[i] != '=') {
                 continue
@@ -783,7 +897,8 @@ object EpubParser {
         val schemeResult = classifySchemeUrl(url)
         if (schemeResult != null) return schemeResult
 
-        val resolved = resolveRelativePath(baseDir, url)
+        val decodedUrl = decodePercentPath(url)
+        val resolved = resolveRelativePath(baseDir, decodedUrl)
         if (resolved.isEmpty()) return AppConstants.HASH_ANCHOR
         if (attrName == "href") {
             val lowerExt = resolved.substringAfterLast('.', "").lowercase()
@@ -861,9 +976,10 @@ object EpubParser {
         if (isInsideDirectory(container, canonicalRoot) && container.exists()) {
             try {
                 val document = parseXmlDocument(container)
-                val rootFiles = document.getElementsByTagName("rootfile")
-                if (rootFiles.length > 0) {
-                    val candidate = (rootFiles.item(0) as Element).getAttribute("full-path")
+                val root = document.documentElement
+                val rootFiles = if (root != null) elementsByLocalName(root, "rootfile") else emptyList()
+                if (rootFiles.isNotEmpty()) {
+                    val candidate = decodePercentPath(rootFiles[0].getAttribute("full-path"))
                     if (candidate.isNotEmpty()) {
                         val file = File(unpackedDir, candidate).canonicalFile
                         if (isInsideDirectory(file, canonicalRoot) && file.exists() && file.isFile) {

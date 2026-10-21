@@ -80,6 +80,7 @@ object AppConstants {
     const val MIME_PNG = "image/png"
     const val MIME_GIF = "image/gif"
     const val MIME_WEBP = "image/webp"
+    const val MIME_SVG = "image/svg+xml"
     const val MIME_BMP = "image/bmp"
     const val MIME_TTF = "font/ttf"
     const val MIME_OTF = "font/otf"

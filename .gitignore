@@ -48,6 +48,7 @@ captures/
 
 # Local agent & ephemeral test artifacts (per feature-development Rule 2)
 .agents/
+test-file/
 app/src/test/
 app/src/androidTest/
 *.test.*
