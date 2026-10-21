@@ -1,0 +1,160 @@
+name: Android CI & Release
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - "v*.*.*"
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Lint & Debug Verification
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4
+        with:
+          cache-read-only: false
+
+      - name: Make gradlew executable
+        run: chmod +x gradlew
+
+      - name: Run Android Lint and Debug Build
+        run: ./gradlew lintDebug assembleDebug --console=plain --no-configuration-cache
+
+  release:
+    name: Build Signed APK & AAB
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    timeout-minutes: 25
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4
+        with:
+          cache-read-only: false
+
+      - name: Make gradlew executable
+        run: chmod +x gradlew
+
+      - name: Resolve version
+        id: version
+        env:
+          GH_REF: ${{ github.ref }}
+        run: |
+          if [[ "$GH_REF" == refs/tags/v* ]]; then
+            RAW_TAG="${GH_REF#refs/tags/v}"
+          else
+            RAW_TAG="1.0.0"
+          fi
+          echo "version_name=${RAW_TAG}" >> "$GITHUB_OUTPUT"
+
+      - name: Decode and validate release keystore from GitHub Secrets
+        env:
+          RELEASE_KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
+          SIGNING_STORE_PASSWORD_SECRET: ${{ secrets.SIGNING_STORE_PASSWORD }}
+          SIGNING_KEY_ALIAS_SECRET: ${{ secrets.SIGNING_KEY_ALIAS }}
+          SIGNING_KEY_PASSWORD_SECRET: ${{ secrets.SIGNING_KEY_PASSWORD }}
+        run: |
+          if [[ -z "$RELEASE_KEYSTORE_BASE64" || -z "$SIGNING_STORE_PASSWORD_SECRET" || -z "$SIGNING_KEY_ALIAS_SECRET" || -z "$SIGNING_KEY_PASSWORD_SECRET" ]]; then
+            echo "Error: RELEASE_KEYSTORE_BASE64, SIGNING_STORE_PASSWORD, SIGNING_KEY_ALIAS, and SIGNING_KEY_PASSWORD secrets must all be configured." >&2
+            exit 1
+          fi
+          KEYSTORE_FILE="${RUNNER_TEMP}/white-release.p12"
+          echo "$RELEASE_KEYSTORE_BASE64" | base64 --decode > "$KEYSTORE_FILE"
+          chmod 600 "$KEYSTORE_FILE"
+          echo "SIGNING_STORE_FILE=$KEYSTORE_FILE" >> "$GITHUB_ENV"
+          echo "SIGNING_STORE_PASSWORD=$SIGNING_STORE_PASSWORD_SECRET" >> "$GITHUB_ENV"
+          echo "SIGNING_KEY_ALIAS=$SIGNING_KEY_ALIAS_SECRET" >> "$GITHUB_ENV"
+          echo "SIGNING_KEY_PASSWORD=$SIGNING_KEY_PASSWORD_SECRET" >> "$GITHUB_ENV"
+
+      - name: Run Android Lint
+        run: ./gradlew lintDebug --console=plain --no-configuration-cache
+
+      - name: Build signed Release APK and AAB
+        env:
+          APP_VERSION_NAME: ${{ steps.version.outputs.version_name }}
+        run: ./gradlew assembleRelease bundleRelease --console=plain --no-configuration-cache
+
+      - name: Verify APK signature fingerprint and stage artifacts
+        env:
+          VERSION_NAME: ${{ steps.version.outputs.version_name }}
+          EXPECTED_CERT_SHA256: ${{ secrets.RELEASE_CERT_SHA256 }}
+        run: |
+          APKSIGNER=$(find "$ANDROID_HOME/build-tools" -name apksigner | sort -V | tail -n 1)
+          CERT_OUT=$("$APKSIGNER" verify --print-certs app/build/outputs/apk/release/app-release.apk)
+          echo "$CERT_OUT"
+          if [[ -n "$EXPECTED_CERT_SHA256" ]]; then
+            if ! echo "$CERT_OUT" | grep -qi "$EXPECTED_CERT_SHA256"; then
+              echo "Error: APK certificate SHA-256 fingerprint does not match RELEASE_CERT_SHA256." >&2
+              exit 1
+            fi
+          fi
+          rm -f "$SIGNING_STORE_FILE"
+          mkdir -p dist
+          cp app/build/outputs/apk/release/app-release.apk "dist/white-v${VERSION_NAME}.apk"
+          cp app/build/outputs/bundle/release/app-release.aab "dist/white-v${VERSION_NAME}.aab"
+          ls -lh dist/
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: white-apk
+          path: dist/white-v*.apk
+          if-no-files-found: error
+          retention-days: 90
+
+      - name: Upload AAB artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: white-aab
+          path: dist/white-v*.aab
+          if-no-files-found: error
+          retention-days: 90
+
+      - name: Publish GitHub Release on version tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
+        with:
+          name: "White v${{ steps.version.outputs.version_name }}"
+          generate_release_notes: true
+          files: |
+            dist/white-v${{ steps.version.outputs.version_name }}.apk
+            dist/white-v${{ steps.version.outputs.version_name }}.aab
+
