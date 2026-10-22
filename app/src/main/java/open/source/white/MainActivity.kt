@@ -87,7 +87,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun setupBookshelf() {
-        bookshelf.layoutManager = GridLayoutManager(this, 3)
+        bookshelf.layoutManager = GridLayoutManager(this, 2)
         bookshelf.itemAnimator = null
         rebuildAdapterForScreenWidth()
     }
@@ -98,7 +98,8 @@ class MainActivity : AppCompatActivity() {
         val availableH = (displayH - topHeaderApprox).coerceAtLeast(dp(400))
         val rowHeight = (availableH / 5).coerceAtLeast(dp(130))
         val coverHeight = (rowHeight - dp(28)).coerceAtLeast(dp(100))
-        val columnWidth = (coverHeight * 0.68f).toInt()
+        // Double the book width so covers and spines appear substantial and clear
+        val columnWidth = (coverHeight * 1.36f).toInt()
         val itemHeight = coverHeight + dp(8)
         while (bookshelf.itemDecorationCount > 0) {
             bookshelf.removeItemDecorationAt(0)

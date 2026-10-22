@@ -3,6 +3,19 @@
 All notable changes to White are documented in this file.
 This project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.4.0] - 2026-10-23
+
+### Added
+- **Apple-style Reflecting Glass UI Theme**: Implemented translucent glass aesthetics across the entire application with specular gradients, frosted surfaces, and refined refractive borders.
+- **Glass Bookshelf**: Floating frosted glass shelves with specular top reflection lines, gradient refractive depth, and ambient shadows.
+- **Substantial Book Width**: Doubled book cover width and enhanced 3D book spine depth with layered translucent glass reflections.
+- **Circular Glass Back Button**: Separated reader back navigation into an isolated circular glass button on the top-left.
+- **Glass Action Card**: Highlights and text size controls unified in a translucent glass pill on the top-right.
+- **Glass Dialogs & Panels**: All popups, highlight editing dialogs, text size controls, and the highlight side drawer now feature frosted glass styling.
+
+### Removed
+- Removed the side scrollbar per user request, restoring a completely clean and distraction-free reading canvas.
+
 ## [1.3.1] - 2026-10-22
 
 ### Changed

@@ -78,7 +78,9 @@ class ReaderActivity : AppCompatActivity() {
     private lateinit var statsTime: TextView
     private lateinit var statsPage: TextView
     private lateinit var statsProgress: TextView
-    private lateinit var topBar: LinearLayout
+    private lateinit var topControls: FrameLayout
+    private lateinit var backButton: TextView
+    private lateinit var rightActionCard: LinearLayout
     private lateinit var selectionBar: LinearLayout
     private lateinit var panel: LinearLayout
     private lateinit var panelItems: LinearLayout
@@ -89,15 +91,7 @@ class ReaderActivity : AppCompatActivity() {
     private var selectedColor = AppConstants.HIGHLIGHT_YELLOW
     private var gestureDetector: GestureDetector? = null
     private var swatchViews: List<View> = emptyList()
-    private lateinit var pageScroller: PageScrollerView
     private var lastUserScrollOrInteraction = System.currentTimeMillis()
-    private val hideScrollerRunnable = Runnable {
-        if (::pageScroller.isInitialized) {
-            pageScroller.animate().alpha(0f).setDuration(250).withEndAction {
-                pageScroller.visibility = View.GONE
-            }.start()
-        }
-    }
 
     private val persistRunnable = Runnable { flushProgress(false) }
     private val tickRunnable = object : Runnable {
@@ -143,7 +137,6 @@ class ReaderActivity : AppCompatActivity() {
         )
 
         buildOverlay()
-        buildPageScroller()
         configureWebView()
         gestureDetector = GestureDetector(this, object : GestureDetector.SimpleOnGestureListener() {
             override fun onSingleTapUp(e: MotionEvent): Boolean {
@@ -213,68 +206,83 @@ class ReaderActivity : AppCompatActivity() {
         val textSecondary = ContextCompat.getColor(this, R.color.text_secondary)
         val blue = ContextCompat.getColor(this, R.color.blue_primary)
 
-        val bar = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            background = GradientDrawable().apply {
-                setColor(Color.parseColor("#F7FAFF"))
-                cornerRadius = dp(14).toFloat()
-                setStroke(dp(1), Color.parseColor("#DCE8F8"))
-            }
-            elevation = dp(3).toFloat()
-            setPadding(dp(4), dp(2), dp(8), dp(2))
+        val overlayContainer = FrameLayout(this).apply {
             visibility = View.GONE
             alpha = 0f
         }
-        val back = TextView(this).apply {
+
+        // Separate circular back button with Apple-style glass effect
+        backButton = TextView(this).apply {
             text = "‹"
-            textSize = 26f
+            textSize = 28f
             gravity = Gravity.CENTER
             setTextColor(blue)
-            setPadding(dp(8), 0, dp(8), dp(4))
+            background = ContextCompat.getDrawable(this@ReaderActivity, R.drawable.bg_glass_circle)
+            elevation = dp(6).toFloat()
             setOnClickListener { exitToBookshelf() }
         }
-        val titleView = TextView(this).apply {
-            text = book.title
-            textSize = 13f
-            maxLines = 1
-            ellipsize = TextUtils.TruncateAt.END
-            setTextColor(textPrimary)
-            setTypeface(typeface, Typeface.BOLD)
-            setPadding(dp(2), 0, dp(8), 0)
+        val backParams = FrameLayout.LayoutParams(dp(44), dp(44)).apply {
+            gravity = Gravity.START or Gravity.TOP
+            setMargins(dp(16), dp(16), 0, 0)
         }
-        val fontButton = TextView(this).apply {
-            text = "Aa"
-            textSize = 15f
-            setTextColor(blue)
-            setTypeface(typeface, Typeface.BOLD)
-            setPadding(dp(10), dp(6), dp(10), dp(6))
-            setOnClickListener { showFontDialog() }
+        overlayContainer.addView(backButton, backParams)
+
+        // Top right glass card housing Highlights and Aa font buttons
+        rightActionCard = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            background = ContextCompat.getDrawable(this@ReaderActivity, R.drawable.bg_glass_card)
+            elevation = dp(6).toFloat()
+            setPadding(dp(12), dp(4), dp(12), dp(4))
         }
         val highlightsButton = TextView(this).apply {
             text = "Highlights"
-            textSize = 12f
+            textSize = 13f
             setTextColor(blue)
-            setPadding(dp(8), dp(6), dp(8), dp(6))
+            setTypeface(typeface, Typeface.BOLD)
+            setPadding(dp(8), dp(6), dp(10), dp(6))
             setOnClickListener { openPanel() }
         }
-        bar.addView(back)
-        bar.addView(titleView, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-        bar.addView(fontButton)
-        bar.addView(highlightsButton)
-        root.addView(bar, FrameLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+        val divider = View(this).apply {
+            background = GradientDrawable().apply {
+                setColor(Color.parseColor("#40B0CDED"))
+            }
+        }
+        val fontButton = TextView(this).apply {
+            text = "Aa"
+            textSize = 16f
+            setTextColor(blue)
+            setTypeface(typeface, Typeface.BOLD)
+            setPadding(dp(10), dp(6), dp(6), dp(6))
+            setOnClickListener { showFontDialog() }
+        }
+        rightActionCard.addView(highlightsButton)
+        rightActionCard.addView(divider, LinearLayout.LayoutParams(dp(1), dp(18)))
+        rightActionCard.addView(fontButton)
+
+        val cardParams = FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT,
+            dp(44)
         ).apply {
-            gravity = Gravity.TOP
-            setMargins(dp(12), dp(12), dp(12), 0)
-        })
-        topBar = bar
+            gravity = Gravity.END or Gravity.TOP
+            setMargins(0, dp(16), dp(16), 0)
+        }
+        overlayContainer.addView(rightActionCard, cardParams)
+
+        root.addView(overlayContainer, FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.MATCH_PARENT
+        ))
+        topControls = overlayContainer
 
         val stats = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            background = GradientDrawable().apply { setColor(Color.parseColor("#F9FBFF")) }
-            elevation = dp(2).toFloat()
+            background = GradientDrawable().apply {
+                setColor(Color.parseColor("#CCFFFFFF")) // Glass bottom bar
+                setStroke(dp(1), Color.parseColor("#40FFFFFF"))
+            }
+            elevation = dp(4).toFloat()
         }
         statsTime = statCell("0m", textSecondary).also { it.setOnClickListener { showReadingTimeDialog() } }
         statsPage = statCell("p. 1 / 1", textSecondary).also { it.setOnClickListener { showContentsDialog() } }
@@ -283,14 +291,14 @@ class ReaderActivity : AppCompatActivity() {
         stats.addView(statsPage, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f))
         stats.addView(statsProgress, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f))
         root.addView(stats, FrameLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT, dp(24)
+            ViewGroup.LayoutParams.MATCH_PARENT, dp(26)
         ).apply { gravity = Gravity.BOTTOM })
 
         buildSelectionBar()
         buildPanel()
 
         scrim = View(this).apply {
-            setBackgroundColor(Color.parseColor("#66000000"))
+            setBackgroundColor(Color.parseColor("#44000000")) // Softer frosted glass scrim
             visibility = View.GONE
             alpha = 0f
             setOnClickListener { closePanel() }
@@ -303,12 +311,12 @@ class ReaderActivity : AppCompatActivity() {
             ViewGroup.LayoutParams.MATCH_PARENT
         ).apply {
             gravity = Gravity.START
-            setMargins(dp(10), dp(10), 0, dp(10))
+            setMargins(dp(12), dp(12), 0, dp(12))
         })
         panel.translationX = -resources.displayMetrics.widthPixels.toFloat()
         scrim.bringToFront()
         panel.bringToFront()
-        topBar.bringToFront()
+        topControls.bringToFront()
         selectionBar.bringToFront()
         stats.bringToFront()
 
@@ -425,12 +433,9 @@ class ReaderActivity : AppCompatActivity() {
         val textSecondary = ContextCompat.getColor(this, R.color.text_secondary)
         val side = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            background = GradientDrawable().apply {
-                setColor(Color.WHITE)
-                cornerRadius = dp(20).toFloat()
-            }
-            elevation = dp(16).toFloat()
-            setPadding(dp(16), dp(16), dp(16), dp(12))
+            background = ContextCompat.getDrawable(this@ReaderActivity, R.drawable.bg_glass_dialog)
+            elevation = dp(20).toFloat()
+            setPadding(dp(18), dp(18), dp(18), dp(14))
             visibility = View.GONE
         }
         val header = LinearLayout(this).apply {
@@ -472,21 +477,21 @@ class ReaderActivity : AppCompatActivity() {
     }
 
     private fun toggleChrome() {
-        if (topBar.visibility == View.VISIBLE) hideChrome() else showChrome()
+        if (topControls.visibility == View.VISIBLE) hideChrome() else showChrome()
     }
 
     private fun showChrome() {
-        topBar.visibility = View.VISIBLE
-        topBar.animate().alpha(1f).setDuration(140).start()
+        topControls.visibility = View.VISIBLE
+        topControls.animate().alpha(1f).setDuration(160).start()
         mainHandler.removeCallbacks(hideChromeRunnable)
         mainHandler.postDelayed(hideChromeRunnable, 4500L)
     }
 
     private fun hideChrome() {
         mainHandler.removeCallbacks(hideChromeRunnable)
-        if (topBar.visibility != View.VISIBLE) return
-        topBar.animate().alpha(0f).setDuration(160).withEndAction {
-            topBar.visibility = View.GONE
+        if (topControls.visibility != View.VISIBLE) return
+        topControls.animate().alpha(0f).setDuration(180).withEndAction {
+            topControls.visibility = View.GONE
         }.start()
     }
 
@@ -528,8 +533,9 @@ class ReaderActivity : AppCompatActivity() {
         val row = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             background = GradientDrawable().apply {
-                setColor(Color.parseColor("#F8FAFC"))
-                cornerRadius = dp(12).toFloat()
+                setColor(Color.parseColor("#44F1F5F9")) // Glass card row
+                cornerRadius = dp(14).toFloat()
+                setStroke(dp(1), Color.parseColor("#66FFFFFF"))
             }
             setPadding(dp(10), dp(9), dp(10), dp(9))
             setOnClickListener {
@@ -687,6 +693,7 @@ class ReaderActivity : AppCompatActivity() {
             .setView(container)
             .setNegativeButton("Cancel", null)
             .create()
+        container.background = ContextCompat.getDrawable(this, R.drawable.bg_glass_dialog)
         colors.forEach { color ->
             val swatch = View(this).apply {
                 background = GradientDrawable().apply {
@@ -713,6 +720,7 @@ class ReaderActivity : AppCompatActivity() {
         val rootLayout = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(20), dp(16), dp(20), dp(12))
+            background = ContextCompat.getDrawable(this@ReaderActivity, R.drawable.bg_glass_dialog)
         }
         val preview = TextView(this).apply {
             text = highlight.text.replace(Regex("\\s+"), " ").trim()
@@ -806,6 +814,7 @@ class ReaderActivity : AppCompatActivity() {
         val container = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(20), dp(16), dp(20), dp(8))
+            background = ContextCompat.getDrawable(this@ReaderActivity, R.drawable.bg_glass_dialog)
         }
         val label = TextView(this).apply {
             text = "Text size " + fontSize + "px"
@@ -1095,10 +1104,7 @@ class ReaderActivity : AppCompatActivity() {
             lastProgress = progress.coerceIn(AppConstants.MIN_PROGRESS, AppConstants.MAX_PROGRESS)
             page = currentPage.coerceAtLeast(1)
             totalPages = pages.coerceAtLeast(1)
-            mainHandler.post {
-                updateStatsBar()
-                showPageScroller()
-            }
+            mainHandler.post { updateStatsBar() }
             mainHandler.removeCallbacks(persistRunnable)
             mainHandler.postDelayed(persistRunnable, AppConstants.PERSIST_DEBOUNCE_MS)
         }
@@ -1254,37 +1260,6 @@ class ReaderActivity : AppCompatActivity() {
             webView.destroy()
         }
         super.onDestroy()
-    }
-
-    private fun buildPageScroller() {
-        pageScroller = PageScrollerView(this).apply {
-            visibility = View.GONE
-            alpha = 0f
-            onPageSelected = { targetPage ->
-                lastUserScrollOrInteraction = System.currentTimeMillis()
-                webView.evaluateJavascript("window.White && window.White.scrollToPage && window.White.scrollToPage(" + targetPage + ", " + totalPages + ");", null)
-            }
-        }
-        val scrollerParams = FrameLayout.LayoutParams(
-            dp(72),
-            FrameLayout.LayoutParams.MATCH_PARENT
-        ).apply {
-            gravity = Gravity.END
-            setMargins(0, 0, 0, 0)
-        }
-        root.addView(pageScroller, scrollerParams)
-        pageScroller.bringToFront()
-    }
-
-    private fun showPageScroller() {
-        if (!::pageScroller.isInitialized) return
-        mainHandler.removeCallbacks(hideScrollerRunnable)
-        pageScroller.update(page, totalPages)
-        if (pageScroller.visibility != View.VISIBLE) {
-            pageScroller.visibility = View.VISIBLE
-            pageScroller.animate().alpha(1f).setDuration(180).start()
-        }
-        mainHandler.postDelayed(hideScrollerRunnable, 2400L)
     }
 
     private fun checkReadingIdle() {
