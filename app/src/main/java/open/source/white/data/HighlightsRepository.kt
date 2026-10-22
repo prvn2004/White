@@ -57,6 +57,13 @@ class HighlightsRepository private constructor(context: Context) {
         save(bookId, getHighlights(bookId).filterNot { it.id == highlightId })
     }
 
+    fun updateHighlightColor(bookId: String, highlightId: String, newColor: Int) {
+        val updated = getHighlights(bookId).map {
+            if (it.id == highlightId) it.copy(color = newColor) else it
+        }
+        save(bookId, updated)
+    }
+
     private fun save(bookId: String, highlights: List<Highlight>) {
         try {
             val array = JSONArray()

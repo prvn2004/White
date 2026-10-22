@@ -37,9 +37,6 @@ class BookshelfAdapter(
         val rootParams = holder.itemView.layoutParams
         rootParams.height = itemHeightPx
         holder.itemView.layoutParams = rootParams
-        val containerParams = holder.coverContainer.layoutParams
-        containerParams.height = coverHeightPx
-        holder.coverContainer.layoutParams = containerParams
         return holder
     }
 
@@ -47,6 +44,19 @@ class BookshelfAdapter(
 
     override fun onBindViewHolder(holder: BookHolder, position: Int) {
         val book = books[position]
+
+        // Calculate dynamic width & spine thickness based on book size / wordCount
+        val spineWidth = when {
+            book.wordCount > 150000 -> (8 * holder.itemView.resources.displayMetrics.density).toInt()
+            book.wordCount > 60000 -> (6 * holder.itemView.resources.displayMetrics.density).toInt()
+            book.wordCount > 20000 -> (5 * holder.itemView.resources.displayMetrics.density).toInt()
+            else -> (3.5f * holder.itemView.resources.displayMetrics.density).toInt()
+        }
+        holder.spine.layoutParams = holder.spine.layoutParams.apply { width = spineWidth }
+
+        val cardParams = holder.coverCard.layoutParams
+        cardParams.height = coverHeightPx
+        holder.coverCard.layoutParams = cardParams
 
         holder.title.text = book.title
         val authorText = if (book.author.isBlank()) {
@@ -103,6 +113,8 @@ class BookshelfAdapter(
     }
 
     class BookHolder(view: View) : RecyclerView.ViewHolder(view) {
+        val coverCard: com.google.android.material.card.MaterialCardView = view.findViewById(R.id.coverCard)
+        val spine: View = view.findViewById(R.id.bookSpine)
         val coverContainer: FrameLayout = view.findViewById(R.id.coverContainer)
         val cover: ImageView = view.findViewById(R.id.coverImage)
         val fallback: LinearLayout = view.findViewById(R.id.coverFallback)

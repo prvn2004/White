@@ -9,22 +9,26 @@ object ReaderScript {
         scroll: Float,
         progress: Int,
         fontSize: Int,
-        highlightsJson: String
+        highlightsJson: String,
+        isDark: Boolean = false
     ): String {
         return TEMPLATE
             .replace("__BRIDGE__", AppConstants.JS_BRIDGE_NAME)
             .replace("__ONSCROLL__", AppConstants.JS_METHOD_ON_SCROLL)
             .replace("__ONSELECT__", AppConstants.JS_METHOD_ON_SELECTION)
             .replace("__ONCLEAR__", AppConstants.JS_METHOD_ON_SELECTION_CLEARED)
+            .replace("__ONHLCLICK__", AppConstants.JS_METHOD_ON_HIGHLIGHT_CLICKED)
             .replace("__SCROLL__", scroll.toString())
             .replace("__PROGRESS__", progress.toString())
             .replace("__FONT__", fontSize.toString())
             .replace("__HIGHLIGHTS__", JSONObject.quote(highlightsJson))
+            .replace("__DARK__", isDark.toString())
     }
 
     private val TEMPLATE = """
 (function () {
   if (window.__whiteReady) {
+    window.White.theme(__DARK__);
     window.White.fontSize(__FONT__);
     window.White.applyHighlights(__HIGHLIGHTS__);
     window.restorePosition(__SCROLL__, __PROGRESS__);
@@ -199,6 +203,27 @@ object ReaderScript {
 
   window.White = window.White || {};
 
+  window.White.theme = function (dark) {
+    var root = document.documentElement;
+    if (dark) {
+      root.style.setProperty("--wh-bg", "#000000");
+      root.style.setProperty("--wh-text", "#e5e7eb");
+      root.style.setProperty("--wh-heading", "#f3f4f6");
+      root.style.setProperty("--wh-divider", "#27272a");
+      root.style.setProperty("--wh-quote", "#9ca3af");
+      root.style.setProperty("--wh-link", "#60a5fa");
+      root.style.setProperty("--wh-pre-bg", "#18181b");
+    } else {
+      root.style.setProperty("--wh-bg", "#ffffff");
+      root.style.setProperty("--wh-text", "#18202c");
+      root.style.setProperty("--wh-heading", "#10233f");
+      root.style.setProperty("--wh-divider", "#e3ebf5");
+      root.style.setProperty("--wh-quote", "#44536b");
+      root.style.setProperty("--wh-link", "#2563eb");
+      root.style.setProperty("--wh-pre-bg", "#f6f8fb");
+    }
+  };
+
   window.White.getSelection = function () {
     return selectionInfo();
   };
@@ -269,6 +294,15 @@ object ReaderScript {
     return true;
   };
 
+  window.White.scrollToPage = function (page, total) {
+    var max = maxScroll();
+    if (max <= 0 || total <= 1) return;
+    var targetRatio = Math.max(0, Math.min(1, (page - 1) / (total - 1)));
+    var desired = targetRatio * max;
+    window.scrollTo(0, desired);
+    sendProgress();
+  };
+
   window.White.jumpToHighlight = function (id) {
     var element = document.querySelector("mark[data-hl=\"" + id + "\"]");
     if (!element) return false;
@@ -335,6 +369,26 @@ object ReaderScript {
     });
   };
 
+  document.addEventListener("click", function (e) {
+    var target = e.target;
+    while (target && target !== document.body) {
+      if (target.tagName && target.tagName.toLowerCase() === "mark" && target.classList.contains("wh-hl")) {
+        var id = target.getAttribute("data-hl");
+        if (id) {
+          var bridge = window.__BRIDGE__;
+          if (bridge && bridge.__ONHLCLICK__) {
+            bridge.__ONHLCLICK__(id);
+            e.preventDefault();
+            e.stopPropagation();
+            return;
+          }
+        }
+      }
+      target = target.parentNode;
+    }
+  }, true);
+
+  window.White.theme(__DARK__);
   window.White.fontSize(__FONT__);
   window.White.applyHighlights(__HIGHLIGHTS__);
   window.restorePosition(__SCROLL__, __PROGRESS__);

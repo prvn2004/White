@@ -3,6 +3,17 @@
 All notable changes to White are documented in this file.
 This project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.3.0] - 2026-10-22
+
+### Added
+- **Highlight Interaction & Management**: Tapping any highlighted text directly opens a dialog allowing immediate color change or deletion via a trash bin action.
+- **Immediate In-Page Highlighting**: Marking a selection now updates highlights live in the page DOM without requiring closing and reopening the book.
+- **5-Row Wooden Bookshelf with 3D Book Styling**: The library now features a warm wooden background, exactly 5 rows of shelves, clean cover-only book presentations without title text clutter, and dynamic 3D spine and page edge depth calculated from book volume.
+- **Right-Edge Fast Page Scroller**: Added an intuitive dashed vertical fast-scroller on the right side of the reader that displays current page progress and allows dragging to jump instantly to any page.
+- **Jump to Page Dialog**: Contents menu now includes a "Jump to page…" action to leap directly to any arbitrary page number.
+- **Black Theme**: Full true-black reading theme option for comfortable night-time reading while keeping the warm wooden bookshelf at home.
+- **Smart Reading Time Tracking**: Idle detection pauses reading session accumulation if inactive for over 5 minutes.
+
 ## [1.2.0] - 2026-10-22
 
 ### Fixed

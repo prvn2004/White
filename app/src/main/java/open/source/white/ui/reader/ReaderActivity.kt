@@ -89,10 +89,20 @@ class ReaderActivity : AppCompatActivity() {
     private var selectedColor = AppConstants.HIGHLIGHT_YELLOW
     private var gestureDetector: GestureDetector? = null
     private var swatchViews: List<View> = emptyList()
+    private lateinit var pageScroller: PageScrollerView
+    private var lastUserScrollOrInteraction = System.currentTimeMillis()
+    private val hideScrollerRunnable = Runnable {
+        if (::pageScroller.isInitialized) {
+            pageScroller.animate().alpha(0f).setDuration(250).withEndAction {
+                pageScroller.visibility = View.GONE
+            }.start()
+        }
+    }
 
     private val persistRunnable = Runnable { flushProgress(false) }
     private val tickRunnable = object : Runnable {
         override fun run() {
+            checkReadingIdle()
             updateStatsBar()
             mainHandler.postDelayed(this, 15000L)
         }
@@ -133,6 +143,7 @@ class ReaderActivity : AppCompatActivity() {
         )
 
         buildOverlay()
+        buildPageScroller()
         configureWebView()
         gestureDetector = GestureDetector(this, object : GestureDetector.SimpleOnGestureListener() {
             override fun onSingleTapUp(e: MotionEvent): Boolean {
@@ -639,6 +650,7 @@ class ReaderActivity : AppCompatActivity() {
     }
 
     private fun showHighlightColorDialog() {
+        val isDark = repository.isDarkTheme()
         if (pendingSelection == null || pendingSelectionText.isNullOrBlank()) {
             webView.evaluateJavascript(
                 "(function(){var s=window.White&&window.White.getSelection?" +
@@ -664,6 +676,7 @@ class ReaderActivity : AppCompatActivity() {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER
             setPadding(dp(16), dp(18), dp(16), dp(18))
+            if (isDark) setBackgroundColor(Color.parseColor("#18181B"))
         }
         val colors = listOf(
             AppConstants.HIGHLIGHT_YELLOW,
@@ -697,6 +710,81 @@ class ReaderActivity : AppCompatActivity() {
         dialog.show()
     }
 
+    private fun showHighlightEditDialog(highlightId: String) {
+        val isDark = repository.isDarkTheme()
+        val highlight = highlightsRepository.getHighlights(book.id).find { it.id == highlightId } ?: return
+        val rootLayout = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(20), dp(16), dp(20), dp(12))
+            if (isDark) setBackgroundColor(Color.parseColor("#18181B"))
+        }
+        val preview = TextView(this).apply {
+            text = highlight.text.replace(Regex("\\s+"), " ").trim()
+            textSize = 13f
+            maxLines = 3
+            ellipsize = TextUtils.TruncateAt.END
+            setTextColor(if (isDark) Color.parseColor("#E5E7EB") else Color.parseColor("#18202C"))
+            setPadding(0, 0, 0, dp(14))
+        }
+        rootLayout.addView(preview)
+
+        val actionRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        val colors = listOf(
+            AppConstants.HIGHLIGHT_YELLOW,
+            AppConstants.HIGHLIGHT_GREEN,
+            AppConstants.HIGHLIGHT_BLUE,
+            AppConstants.HIGHLIGHT_PINK
+        )
+        var dialogRef: AlertDialog? = null
+        colors.forEach { color ->
+            val swatch = View(this).apply {
+                background = GradientDrawable().apply {
+                    setColor(color)
+                    shape = GradientDrawable.OVAL
+                    setStroke(dp(2), if (color == highlight.color) ContextCompat.getColor(this@ReaderActivity, R.color.blue_primary) else Color.TRANSPARENT)
+                }
+                setOnClickListener {
+                    highlightsRepository.updateHighlightColor(book.id, highlightId, color)
+                    applyHighlightsToPage()
+                    refreshPanelItems()
+                    dialogRef?.dismiss()
+                }
+            }
+            val p = LinearLayout.LayoutParams(dp(36), dp(36)).apply { marginEnd = dp(12) }
+            actionRow.addView(swatch, p)
+        }
+
+        // Spacer
+        actionRow.addView(View(this), LinearLayout.LayoutParams(0, dp(36), 1f))
+
+        // Delete / Bin button
+        val deleteBtn = TextView(this).apply {
+            text = "🗑 Delete"
+            textSize = 13f
+            setTextColor(Color.parseColor("#EF4444"))
+            setTypeface(typeface, Typeface.BOLD)
+            setPadding(dp(12), dp(8), dp(12), dp(8))
+            setOnClickListener {
+                highlightsRepository.deleteHighlight(book.id, highlightId)
+                applyHighlightsToPage()
+                refreshPanelItems()
+                dialogRef?.dismiss()
+                android.widget.Toast.makeText(this@ReaderActivity, "Highlight deleted", android.widget.Toast.LENGTH_SHORT).show()
+            }
+        }
+        actionRow.addView(deleteBtn)
+        rootLayout.addView(actionRow)
+
+        dialogRef = AlertDialog.Builder(this)
+            .setTitle("Highlight")
+            .setView(rootLayout)
+            .setNegativeButton("Close", null)
+            .show()
+    }
+
     private fun parseSelection(result: String?): CapturedSelection? {
         if (result.isNullOrBlank() || result == "null") return null
         return try {
@@ -719,14 +807,16 @@ class ReaderActivity : AppCompatActivity() {
     }
 
     private fun showFontDialog() {
+        val isDark = repository.isDarkTheme()
         val container = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(20), dp(16), dp(20), dp(8))
+            if (isDark) setBackgroundColor(Color.parseColor("#18181B"))
         }
         val label = TextView(this).apply {
             text = "Text size " + fontSize + "px"
             textSize = 14f
-            setTextColor(ContextCompat.getColor(this@ReaderActivity, R.color.text_primary))
+            setTextColor(if (isDark) Color.parseColor("#E5E7EB") else ContextCompat.getColor(this@ReaderActivity, R.color.text_primary))
         }
         val controls = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -750,11 +840,51 @@ class ReaderActivity : AppCompatActivity() {
         controls.addView(bigger, LinearLayout.LayoutParams(dp(64), dp(44)))
         container.addView(label)
         container.addView(controls)
+
+        // Add Theme toggle row
+        val themeRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(0, dp(18), 0, dp(4))
+        }
+        val themeLabel = TextView(this).apply {
+            text = "Reading Theme"
+            textSize = 14f
+            setTextColor(if (isDark) Color.parseColor("#E5E7EB") else ContextCompat.getColor(this@ReaderActivity, R.color.text_primary))
+        }
+        val themeBtn = TextView(this).apply {
+            text = if (isDark) "Black" else "White"
+            textSize = 13f
+            setTypeface(typeface, Typeface.BOLD)
+            gravity = Gravity.CENTER
+            setTextColor(Color.WHITE)
+            background = GradientDrawable().apply {
+                setColor(if (isDark) Color.parseColor("#3F3F46") else ContextCompat.getColor(this@ReaderActivity, R.color.blue_primary))
+                cornerRadius = dp(12).toFloat()
+            }
+            setPadding(dp(16), dp(8), dp(16), dp(8))
+            setOnClickListener {
+                val newDark = !repository.isDarkTheme()
+                repository.setDarkTheme(newDark)
+                applyCurrentTheme()
+                text = if (newDark) "Black" else "White"
+            }
+        }
+        themeRow.addView(themeLabel, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        themeRow.addView(themeBtn)
+        container.addView(themeRow)
+
         AlertDialog.Builder(this)
             .setTitle("Display")
             .setView(container)
             .setPositiveButton("Done", null)
             .show()
+    }
+
+    private fun applyCurrentTheme() {
+        val isDark = repository.isDarkTheme()
+        webView.setBackgroundColor(if (isDark) Color.BLACK else Color.WHITE)
+        webView.evaluateJavascript("window.White && window.White.theme && window.White.theme($isDark);", null)
     }
 
     private fun fontControl(textValue: String, action: () -> Unit): TextView {
@@ -775,19 +905,46 @@ class ReaderActivity : AppCompatActivity() {
         val titles = book.chapterTitles.ifEmpty {
             (0 until book.totalChapters.coerceAtLeast(1)).map { "Chapter " + (it + 1) }
         }
+        val items = arrayOf("Jump to page…") + titles.toTypedArray()
         AlertDialog.Builder(this)
             .setTitle("Contents")
-            .setItems(titles.toTypedArray()) { _, index ->
-                webView.evaluateJavascript(
-                    "(function(){var e=document.getElementById('chapter-" + index + "');" +
-                        "if(!e){var a=document.querySelectorAll('.epub-chapter');" +
-                        "for(var i=0;i<a.length;i++){if(a[i].getAttribute('data-chapter')=='" +
-                        index + "'){e=a[i];break;}}}" +
-                        "if(e){e.scrollIntoView({block:'start'});return true;}return false;})()",
-                    null
-                )
+            .setItems(items) { _, which ->
+                if (which == 0) {
+                    promptJumpToPage()
+                } else {
+                    val chapterIdx = which - 1
+                    webView.evaluateJavascript(
+                        "(function(){var e=document.getElementById('chapter-" + chapterIdx + "');" +
+                            "if(!e){var a=document.querySelectorAll('.epub-chapter');" +
+                            "for(var i=0;i<a.length;i++){if(a[i].getAttribute('data-chapter')=='" +
+                            chapterIdx + "'){e=a[i];break;}}}" +
+                            "if(e){e.scrollIntoView({block:'start'});return true;}return false;})()",
+                        null
+                    )
+                }
             }
             .setNegativeButton("Close", null)
+            .show()
+    }
+
+    private fun promptJumpToPage() {
+        val input = android.widget.EditText(this).apply {
+            inputType = android.text.InputType.TYPE_CLASS_NUMBER
+            hint = "1 - $totalPages"
+            setPadding(dp(20), dp(16), dp(20), dp(16))
+        }
+        AlertDialog.Builder(this)
+            .setTitle("Jump to page")
+            .setView(input)
+            .setPositiveButton("Go") { _, _ ->
+                val num = input.text.toString().trim().toIntOrNull()
+                if (num != null && num in 1..totalPages) {
+                    webView.evaluateJavascript("window.White && window.White.scrollToPage && window.White.scrollToPage($num, $totalPages);", null)
+                } else {
+                    android.widget.Toast.makeText(this, "Invalid page number", android.widget.Toast.LENGTH_SHORT).show()
+                }
+            }
+            .setNegativeButton("Cancel", null)
             .show()
     }
 
@@ -886,7 +1043,7 @@ class ReaderActivity : AppCompatActivity() {
         if ((applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0) {
             WebView.setWebContentsDebuggingEnabled(true)
         }
-        webView.setBackgroundColor(Color.WHITE)
+        webView.setBackgroundColor(if (repository.isDarkTheme()) Color.BLACK else Color.WHITE)
         webView.isVerticalScrollBarEnabled = false
         webView.isHorizontalScrollBarEnabled = false
         webView.overScrollMode = View.OVER_SCROLL_ALWAYS
@@ -956,6 +1113,8 @@ class ReaderActivity : AppCompatActivity() {
     private fun dispatchToSuper(event: MotionEvent): Boolean = super.dispatchTouchEvent(event)
 
     override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
+        lastUserScrollOrInteraction = System.currentTimeMillis()
+        if (sessionStart == 0L) trackSessionStart()
         gestureDetector?.onTouchEvent(ev)
         if (::brightnessController.isInitialized) {
             return brightnessController.onDispatchTouchEvent(ev, ::dispatchToSuper)
@@ -976,11 +1135,15 @@ class ReaderActivity : AppCompatActivity() {
         @JavascriptInterface
         fun onScrollProgress(top: Double, progress: Int, currentPage: Int, pages: Int) {
             if (!top.isFinite()) return
+            lastUserScrollOrInteraction = System.currentTimeMillis()
             lastScroll = top.toFloat().coerceAtLeast(0f)
             lastProgress = progress.coerceIn(AppConstants.MIN_PROGRESS, AppConstants.MAX_PROGRESS)
             page = currentPage.coerceAtLeast(1)
             totalPages = pages.coerceAtLeast(1)
-            mainHandler.post { updateStatsBar() }
+            mainHandler.post {
+                updateStatsBar()
+                showPageScroller()
+            }
             mainHandler.removeCallbacks(persistRunnable)
             mainHandler.postDelayed(persistRunnable, AppConstants.PERSIST_DEBOUNCE_MS)
         }
@@ -1013,6 +1176,15 @@ class ReaderActivity : AppCompatActivity() {
         fun onSelectionCleared() {
             mainHandler.post {
                 if (::selectionBar.isInitialized) selectionBar.visibility = View.GONE
+            }
+        }
+
+        @Keep
+        @JavascriptInterface
+        fun onHighlightClicked(id: String) {
+            mainHandler.post {
+                lastUserScrollOrInteraction = System.currentTimeMillis()
+                showHighlightEditDialog(id)
             }
         }
     }
@@ -1049,7 +1221,8 @@ class ReaderActivity : AppCompatActivity() {
                 scroll = lastScroll,
                 progress = lastProgress,
                 fontSize = fontSize,
-                highlightsJson = buildHighlightsJson()
+                highlightsJson = buildHighlightsJson(),
+                isDark = repository.isDarkTheme()
             )
             view.evaluateJavascript(script, null)
         }
@@ -1128,5 +1301,43 @@ class ReaderActivity : AppCompatActivity() {
         }
         super.onDestroy()
     }
-}
 
+    private fun buildPageScroller() {
+        pageScroller = PageScrollerView(this).apply {
+            visibility = View.GONE
+            alpha = 0f
+            onPageSelected = { targetPage ->
+                lastUserScrollOrInteraction = System.currentTimeMillis()
+                webView.evaluateJavascript("window.White && window.White.scrollToPage && window.White.scrollToPage(" + targetPage + ", " + totalPages + ");", null)
+            }
+        }
+        val scrollerParams = FrameLayout.LayoutParams(
+            dp(56),
+            FrameLayout.LayoutParams.MATCH_PARENT
+        ).apply {
+            gravity = Gravity.END
+            setMargins(0, dp(48), dp(4), dp(48))
+        }
+        root.addView(pageScroller, scrollerParams)
+        pageScroller.bringToFront()
+    }
+
+    private fun showPageScroller() {
+        if (!::pageScroller.isInitialized) return
+        mainHandler.removeCallbacks(hideScrollerRunnable)
+        pageScroller.update(page, totalPages)
+        if (pageScroller.visibility != View.VISIBLE) {
+            pageScroller.visibility = View.VISIBLE
+            pageScroller.animate().alpha(1f).setDuration(180).start()
+        }
+        mainHandler.postDelayed(hideScrollerRunnable, 2400L)
+    }
+
+    private fun checkReadingIdle() {
+        val now = System.currentTimeMillis()
+        // If user hasn't scrolled or touched in 5 minutes, pause accumulating reading time
+        if (sessionStart > 0L && (now - lastUserScrollOrInteraction) > 300000L) {
+            trackSessionEnd()
+        }
+    }
+}

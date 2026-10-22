@@ -18,6 +18,7 @@ data class Book(
     val chapterTitles: List<String> = emptyList(),
     val totalReadingMillis: Long = 0L,
     val dailyReadingMillis: Map<String, Long> = emptyMap(),
+    val wordCount: Int = 0,
     val addedTimestamp: Long = System.currentTimeMillis(),
     val lastReadTimestamp: Long = System.currentTimeMillis()
 ) {
@@ -40,6 +41,7 @@ data class Book(
             val reading = JSONObject()
             dailyReadingMillis.forEach { (day, millis) -> reading.put(day, millis) }
             put(AppConstants.FIELD_DAILY_READING_MS, reading)
+            put(AppConstants.FIELD_WORD_COUNT, wordCount)
             put(AppConstants.FIELD_ADDED_AT, addedTimestamp)
             put(AppConstants.FIELD_LAST_READ_AT, lastReadTimestamp)
         }
@@ -82,6 +84,7 @@ data class Book(
                 chapterTitles = titles,
                 totalReadingMillis = json.optLong(AppConstants.FIELD_TOTAL_READING_MS, 0L),
                 dailyReadingMillis = reading,
+                wordCount = json.optInt(AppConstants.FIELD_WORD_COUNT, 0),
                 addedTimestamp = json.optLong(AppConstants.FIELD_ADDED_AT, System.currentTimeMillis()),
                 lastReadTimestamp = json.optLong(AppConstants.FIELD_LAST_READ_AT, System.currentTimeMillis())
             )

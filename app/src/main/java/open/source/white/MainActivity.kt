@@ -93,10 +93,13 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun rebuildAdapterForScreenWidth() {
-        val columnWidth = (resources.displayMetrics.widthPixels / 3 - dp(22)).coerceAtLeast(120)
-        val coverHeight = (columnWidth * 1.5f).toInt()
-        val itemHeight = coverHeight + dp(72)
-        val rowHeight = itemHeight + dp(22)
+        val displayH = resources.displayMetrics.heightPixels
+        val topHeaderApprox = dp(80)
+        val availableH = (displayH - topHeaderApprox).coerceAtLeast(dp(400))
+        val rowHeight = (availableH / 5).coerceAtLeast(dp(130))
+        val coverHeight = (rowHeight - dp(28)).coerceAtLeast(dp(100))
+        val columnWidth = (coverHeight * 0.68f).toInt()
+        val itemHeight = coverHeight + dp(8)
         while (bookshelf.itemDecorationCount > 0) {
             bookshelf.removeItemDecorationAt(0)
         }
@@ -137,11 +140,9 @@ class MainActivity : AppCompatActivity() {
         if (books.isEmpty()) {
             emptyState.visibility = View.VISIBLE
             bookshelf.visibility = View.VISIBLE
-            libraryCount.text = ""
         } else {
             emptyState.visibility = View.GONE
             bookshelf.visibility = View.VISIBLE
-            libraryCount.text = resources.getQuantityString(R.plurals.book_count, books.size, books.size)
         }
     }
 
@@ -195,9 +196,11 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun showMoreMenu() {
+        val isDark = repository.isDarkTheme()
         val options = arrayOf(
             getString(R.string.about),
-            getString(R.string.reading_stats)
+            getString(R.string.reading_stats),
+            if (isDark) "Theme: Black (tap to switch to White)" else "Theme: White (tap to switch to Black)"
         )
         AlertDialog.Builder(this)
             .setTitle(getString(R.string.app_name))
@@ -205,10 +208,17 @@ class MainActivity : AppCompatActivity() {
                 when (which) {
                     0 -> showAbout()
                     1 -> showReadingStats()
+                    2 -> toggleTheme()
                 }
             }
             .setNegativeButton(R.string.cancel, null)
             .show()
+    }
+
+    private fun toggleTheme() {
+        val current = repository.isDarkTheme()
+        repository.setDarkTheme(!current)
+        Toast.makeText(this, if (!current) "Black theme activated" else "White theme activated", Toast.LENGTH_SHORT).show()
     }
 
     private fun showAbout() {

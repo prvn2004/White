@@ -320,6 +320,14 @@ class BookRepository private constructor(context: Context) {
         prefs.edit().putFloat(AppConstants.KEY_READER_BRIGHTNESS, clamped).apply()
     }
 
+    fun isDarkTheme(): Boolean {
+        return prefs.getBoolean(AppConstants.KEY_DARK_THEME, false)
+    }
+
+    fun setDarkTheme(enabled: Boolean) {
+        prefs.edit().putBoolean(AppConstants.KEY_DARK_THEME, enabled).apply()
+    }
+
     companion object {
         @Volatile
         private var instance: BookRepository? = null

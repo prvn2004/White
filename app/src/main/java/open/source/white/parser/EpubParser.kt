@@ -147,7 +147,7 @@ object EpubParser {
             } catch (error: Exception) {
                 ""
             }
-            if (existing.contains("data-white-schema='8'") && existing.length > 1200) {
+            if (existing.contains("data-white-schema='9'") && existing.length > 1200) {
                 return readerFile
             }
         }
@@ -245,6 +245,7 @@ object EpubParser {
         val titles = chapterPaths.mapIndexed { index, path ->
             chapterTitleFor(File(root, path), path, metadata.title, index)
         }
+        val words = countWordsInFiles(root, chapterPaths)
 
         val readerHtml = File(bookDir, AppConstants.READER_HTML_FILE)
         buildReaderHtml(root, chapterPaths, titles, readerHtml, metadata.title)
@@ -259,7 +260,8 @@ object EpubParser {
             coverPath = coverPath,
             format = AppConstants.FORMAT_EPUB,
             totalChapters = chapterPaths.size,
-            chapterTitles = titles
+            chapterTitles = titles,
+            wordCount = words
         )
     }
 
@@ -281,6 +283,7 @@ object EpubParser {
             else -> textToHtml(raw)
         }
         val body = sanitizeAndRewriteHtml(rawBody, "", emptyMap(), 0)
+        val words = countWordsInString(raw)
         val readerHtml = File(bookDir, AppConstants.READER_HTML_FILE)
         writeSimpleReader(readerHtml, title, listOf("Content"), listOf(body))
 
@@ -293,7 +296,8 @@ object EpubParser {
             coverPath = null,
             format = format,
             totalChapters = 1,
-            chapterTitles = listOf("Content")
+            chapterTitles = listOf("Content"),
+            wordCount = words
         )
     }
 
@@ -355,7 +359,8 @@ object EpubParser {
             coverPath = if (cover.exists()) cover.absolutePath else null,
             format = AppConstants.FORMAT_PDF,
             totalChapters = pageNames.size,
-            chapterTitles = titles
+            chapterTitles = titles,
+            wordCount = pageNames.size * 300
         )
     }
 
@@ -799,13 +804,13 @@ object EpubParser {
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=3.0, user-scalable=yes"/>
 <title>""").append(escapeHtml(bookTitle)).append("""</title>
 <style>
-  html, body { background: #ffffff !important; }
+  html, body { background: var(--wh-bg, #ffffff) !important; }
   html { margin: 0; padding: 0; }
   body {
     margin: 0 auto;
     padding: 22px 22px 96px 22px;
     max-width: 720px;
-    color: #18202c !important;
+    color: var(--wh-text, #18202c) !important;
     font-family: "Georgia", "Noto Serif", "Times New Roman", serif;
     font-size: var(--wh-font-size, 19px);
     line-height: 1.78;
@@ -815,32 +820,57 @@ object EpubParser {
     word-wrap: break-word;
     overflow-wrap: break-word;
   }
-  .epub-chapter { background: #ffffff !important; }
-  .chapter-divider { width: 44px; height: 3px; margin: 42px auto; border-radius: 3px; background: #e3ebf5; }
-  p, div, span, li, td, th { color: #18202c !important; background-color: transparent !important; }
+  .epub-chapter { background: var(--wh-bg, #ffffff) !important; }
+  .chapter-divider { width: 44px; height: 3px; margin: 42px auto; border-radius: 3px; background: var(--wh-divider, #e3ebf5); }
+  p, div, span, li, td, th { color: var(--wh-text, #18202c) !important; background-color: transparent !important; }
   p { margin: 0 0 1.1em 0; }
-  h1, h2, h3, h4, h5, h6 { color: #10233f !important; line-height: 1.35; font-weight: 700; margin: 1.4em 0 0.7em 0; }
+  h1, h2, h3, h4, h5, h6 { color: var(--wh-heading, #10233f) !important; line-height: 1.35; font-weight: 700; margin: 1.4em 0 0.7em 0; }
   h1 { font-size: 1.5em; } h2 { font-size: 1.32em; } h3 { font-size: 1.18em; }
   img, svg, image { max-width: 100% !important; height: auto !important; display: block; margin: 16px auto; background: transparent !important; }
-  blockquote { margin: 1.3em 0; padding: 2px 0 2px 16px; border-left: 3px solid #93b4e6; color: #44536b !important; font-style: italic; }
-  a { color: #2563eb !important; }
-  hr { border: 0; height: 1px; background: #e6edf6; margin: 28px auto; width: 72%; }
+  blockquote { margin: 1.3em 0; padding: 2px 0 2px 16px; border-left: 3px solid #93b4e6; color: var(--wh-quote, #44536b) !important; font-style: italic; }
+  a { color: var(--wh-link, #2563eb) !important; }
+  hr { border: 0; height: 1px; background: var(--wh-divider, #e6edf6); margin: 28px auto; width: 72%; }
   pre, code { font-family: "Roboto Mono", monospace; font-size: 0.88em; }
-  pre { padding: 12px; overflow-x: auto; background: #f6f8fb !important; border-radius: 6px; }
-  mark.wh-hl { border-radius: 2px; padding: 0; }
+  pre { padding: 12px; overflow-x: auto; background: var(--wh-pre-bg, #f6f8fb) !important; border-radius: 6px; }
+  mark.wh-hl { border-radius: 3px; padding: 1px 0; cursor: pointer; }
   .pdf-page img { margin: 0 auto 14px auto; }
   .wh-flash { animation: whflash 1.2s ease-out; }
   @keyframes whflash { 0% { background: #FFEB3B; } 100% { background: transparent; } }
   ::selection { background: #CDE3FF; }
 </style>
 </head>
-<body data-white-schema='8'>
+<body data-white-schema='9'>
 """)
     }
 
     private fun appendDocumentTail(html: StringBuilder) {
         html.append("</body>")
         html.append("</html>")
+    }
+
+    private fun countWordsInString(text: String): Int {
+        var count = 0
+        var inWord = false
+        for (ch in text) {
+            if (ch.isLetterOrDigit()) {
+                if (!inWord) { count++; inWord = true }
+            } else {
+                inWord = false
+            }
+        }
+        return count
+    }
+
+    private fun countWordsInFiles(root: File, relativePaths: List<String>): Int {
+        var total = 0
+        for (path in relativePaths) {
+            val f = File(root, path)
+            if (f.exists() && f.isFile) {
+                val text = readChapterText(f)
+                total += countWordsInString(text)
+            }
+        }
+        return total
     }
 
     private fun readChapterText(file: File): String {

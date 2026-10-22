@@ -31,20 +31,20 @@ class ShelfDecoration(
         val right = parent.width.toFloat() - parent.paddingRight.toFloat() - 8f * density
         if (right <= left) return
 
-        val boardHeight = 8f * density
-        val radius = 4f * density
+        val boardHeight = 10f * density
+        val radius = 3f * density
         var rowBottom = parent.paddingTop.toFloat() + rowHeightPx
 
         while (rowBottom - boardHeight < parent.height + rowHeightPx) {
-            val boardTop = rowBottom - boardHeight - 6f * density
+            val boardTop = rowBottom - boardHeight - 2f * density
 
-            rect.set(left + 3f * density, boardTop + 3f * density, right + 3f * density, boardTop + boardHeight + 3f * density)
+            rect.set(left + 2f * density, boardTop + 4f * density, right + 2f * density, boardTop + boardHeight + 4f * density)
             canvas.drawRoundRect(rect, radius, radius, shadowPaint)
 
             rect.set(left, boardTop, right, boardTop + boardHeight)
             canvas.drawRoundRect(rect, radius, radius, edgePaint)
 
-            rect.set(left, boardTop + 2.2f * density, right, boardTop + boardHeight)
+            rect.set(left, boardTop + 2f * density, right, boardTop + boardHeight - 1f * density)
             canvas.drawRoundRect(rect, radius, radius, boardPaint)
 
             rowBottom += rowHeightPx

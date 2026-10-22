@@ -5,6 +5,7 @@ object AppConstants {
     const val PREFS_NAME = "white_reader_prefs"
     const val KEY_LAST_OPENED_BOOK_ID = "key_last_opened_book_id"
     const val KEY_READER_BRIGHTNESS = "key_reader_brightness"
+    const val KEY_DARK_THEME = "key_dark_theme"
     const val BOOKS_JSON_FILE = "books.json"
     const val BOOKS_TMP_SUFFIX = ".tmp"
     const val BOOKS_BACKUP_SUFFIX = ".bak"
@@ -31,6 +32,7 @@ object AppConstants {
     const val FIELD_CHAPTER_TITLES = "chapterTitles"
     const val FIELD_TOTAL_READING_MS = "totalReadingMillis"
     const val FIELD_DAILY_READING_MS = "dailyReadingMillis"
+    const val FIELD_WORD_COUNT = "wordCount"
     const val FIELD_ADDED_AT = "addedTimestamp"
     const val FIELD_LAST_READ_AT = "lastReadTimestamp"
 
@@ -96,6 +98,7 @@ object AppConstants {
     const val JS_METHOD_ON_SCROLL = "onScrollProgress"
     const val JS_METHOD_ON_SELECTION = "onTextSelected"
     const val JS_METHOD_ON_SELECTION_CLEARED = "onSelectionCleared"
+    const val JS_METHOD_ON_HIGHLIGHT_CLICKED = "onHighlightClicked"
     const val JS_FUNC_RESTORE = "restorePosition"
     const val JS_FUNC_FLUSH = "flushReaderProgress"
     const val BLANK_URL = "about:blank"

@@ -8,6 +8,7 @@
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="match_parent"
+        android:background="@drawable/bg_wood"
         android:orientation="vertical">
 
         <LinearLayout
@@ -30,17 +31,19 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:text="@string/library_title"
-                    android:textColor="@color/blue_deep"
+                    android:textColor="#FFFFFF"
+                    android:shadowColor="#80000000"
+                    android:shadowDx="1"
+                    android:shadowDy="2"
+                    android:shadowRadius="3"
                     android:textSize="28sp"
                     android:textStyle="bold" />
 
                 <TextView
                     android:id="@+id/libraryCount"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="2dp"
-                    android:textColor="@color/text_secondary"
-                    android:textSize="13sp" />
+                    android:layout_width="0dp"
+                    android:layout_height="0dp"
+                    android:visibility="gone" />
             </LinearLayout>
 
             <TextView
@@ -49,7 +52,11 @@
                 android:layout_height="44dp"
                 android:gravity="center"
                 android:text="⋮"
-                android:textColor="@color/blue_deep"
+                android:textColor="#FFFFFF"
+                android:shadowColor="#80000000"
+                android:shadowDx="1"
+                android:shadowDy="2"
+                android:shadowRadius="3"
                 android:textSize="24sp"
                 android:background="?attr/selectableItemBackgroundBorderless"
                 android:contentDescription="@string/more_options" />
@@ -92,7 +99,11 @@
                     android:layout_height="wrap_content"
                     android:layout_marginTop="16dp"
                     android:text="@string/empty_title"
-                    android:textColor="@color/blue_deep"
+                    android:textColor="#FFFFFF"
+                    android:shadowColor="#B0000000"
+                    android:shadowDx="1"
+                    android:shadowDy="2"
+                    android:shadowRadius="4"
                     android:textSize="18sp"
                     android:textStyle="bold" />
 
@@ -101,7 +112,11 @@
                     android:layout_height="wrap_content"
                     android:layout_marginTop="6dp"
                     android:text="@string/empty_subtitle"
-                    android:textColor="@color/text_secondary"
+                    android:textColor="#E0FFFFFF"
+                    android:shadowColor="#B0000000"
+                    android:shadowDx="1"
+                    android:shadowDy="2"
+                    android:shadowRadius="3"
                     android:textSize="14sp" />
             </LinearLayout>
         </FrameLayout>
