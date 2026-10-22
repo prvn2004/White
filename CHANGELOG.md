@@ -3,6 +3,12 @@
 All notable changes to White are documented in this file.
 This project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.4.1] - 2026-10-23
+
+### Added
+- **Enhanced Liquid Glass Styling**: Refracted chromatic gradient overlays, crisp specular outlines, and soft light dispersion across glass cards, dialogs, and isolated controls.
+- **Substantial 3D Book Thickness**: Added dynamic cylindrical spine gradients and doubled 3D book spine thickness (up to 18dp) scaled according to book size for physical depth on shelves.
+
 ## [1.4.0] - 2026-10-23
 
 ### Added

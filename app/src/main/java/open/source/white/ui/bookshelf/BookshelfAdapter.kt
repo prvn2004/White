@@ -46,11 +46,12 @@ class BookshelfAdapter(
         val book = books[position]
 
         // Calculate dynamic width & spine thickness based on book size / wordCount
+        // Substantial thickness for 3D realism
         val spineWidth = when {
-            book.wordCount > 150000 -> (8 * holder.itemView.resources.displayMetrics.density).toInt()
-            book.wordCount > 60000 -> (6 * holder.itemView.resources.displayMetrics.density).toInt()
-            book.wordCount > 20000 -> (5 * holder.itemView.resources.displayMetrics.density).toInt()
-            else -> (3.5f * holder.itemView.resources.displayMetrics.density).toInt()
+            book.wordCount > 150000 -> (18 * holder.itemView.resources.displayMetrics.density).toInt()
+            book.wordCount > 60000 -> (14 * holder.itemView.resources.displayMetrics.density).toInt()
+            book.wordCount > 20000 -> (11 * holder.itemView.resources.displayMetrics.density).toInt()
+            else -> (9 * holder.itemView.resources.displayMetrics.density).toInt()
         }
         holder.spine.layoutParams = holder.spine.layoutParams.apply { width = spineWidth }
 
