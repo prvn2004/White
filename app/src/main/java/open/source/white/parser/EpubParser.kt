@@ -147,7 +147,7 @@ object EpubParser {
             } catch (error: Exception) {
                 ""
             }
-            if (existing.contains("data-white-schema='7'") && existing.length > 1200) {
+            if (existing.contains("data-white-schema='8'") && existing.length > 1200) {
                 return readerFile
             }
         }
@@ -366,8 +366,7 @@ object EpubParser {
         bodies: List<String>
     ) {
         val sb = StringBuilder(64 * 1024)
-        val nonce = generateScriptNonce()
-        appendDocumentHead(sb, title, nonce)
+        appendDocumentHead(sb, title)
         bodies.forEachIndexed { index, body ->
             sb.append("<section class='epub-chapter' id='chapter-")
                 .append(index)
@@ -382,7 +381,7 @@ object EpubParser {
                 sb.append("<div class='chapter-divider'></div>")
             }
         }
-        appendDocumentTail(sb, nonce)
+        appendDocumentTail(sb)
         target.writeText(sb.toString(), Charsets.UTF_8)
     }
 
@@ -751,8 +750,7 @@ object EpubParser {
         bookTitle: String
     ) {
         val html = StringBuilder(96 * 1024)
-        val nonce = generateScriptNonce()
-        appendDocumentHead(html, bookTitle, nonce)
+        appendDocumentHead(html, bookTitle)
         val chapterIndexMap = HashMap<String, Int>(chapterPaths.size)
         for (idx in chapterPaths.indices) chapterIndexMap[chapterPaths[idx]] = idx
         val canonicalRoot = unpackedDir.canonicalFile
@@ -783,17 +781,21 @@ object EpubParser {
                 html.append("<div class='chapter-divider'></div>")
             }
         }
-        appendDocumentTail(html, nonce)
+        appendDocumentTail(html)
         outputFile.writeText(html.toString(), Charsets.UTF_8)
     }
 
-    private fun appendDocumentHead(html: StringBuilder, bookTitle: String, nonce: String) {
+    private fun appendDocumentHead(html: StringBuilder, bookTitle: String) {
         val origin = AppConstants.VIRTUAL_ASSET_ORIGIN.trimEnd('/')
+        val csp = "default-src 'none'; img-src " + origin + " data:; style-src 'unsafe-inline' " +
+            origin + "; font-src " + origin + " data:; script-src 'none'; frame-src 'none'; " +
+            "object-src 'none'; base-uri 'none'; form-action 'none';"
         html.append("""<!DOCTYPE html>
 <html>
 <head>
 <meta charset="utf-8"/>
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src """).append(origin).append(""" data:; style-src 'unsafe-inline' """).append(origin).append("""; font-src """).append(origin).append(""" data:; script-src 'nonce-""").append(nonce).append("""'; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none';"/>
+<meta http-equiv="Content-Security-Policy" content="""").append('"').append(csp).append('"').append("/>")
+        html.append("""
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=3.0, user-scalable=yes"/>
 <title>""").append(escapeHtml(bookTitle)).append("""</title>
 <style>
@@ -832,206 +834,13 @@ object EpubParser {
   ::selection { background: #CDE3FF; }
 </style>
 </head>
-<body data-white-schema='7'>
+<body data-white-schema='8'>
 """)
     }
 
-    private fun appendDocumentTail(html: StringBuilder, nonce: String) {
-        val bridge = AppConstants.JS_BRIDGE_NAME
-        val onScroll = AppConstants.JS_METHOD_ON_SCROLL
-        val onSelection = AppConstants.JS_METHOD_ON_SELECTION
-        val restoreFn = AppConstants.JS_FUNC_RESTORE
-        val flushFn = AppConstants.JS_FUNC_FLUSH
-        html.append("<script nonce=\"").append(nonce).append("\">\n")
-        html.append("""(function () {
-  var restoring = false;
-  var pending = null;
-  var targetTop = 0;
-  var targetPercent = 0;
-  var selectionTimer = null;
-
-  function currentScroll() { return window.pageYOffset || document.documentElement.scrollTop || 0; }
-  function maxScroll() { return Math.max(0, document.documentElement.scrollHeight - window.innerHeight); }
-  function progress() { var m = maxScroll(); return m <= 0 ? 0 : Math.min(100, Math.max(0, Math.round((currentScroll() / m) * 100))); }
-  function pageInfo() {
-    var h = Math.max(1, window.innerHeight);
-    var pages = Math.max(1, Math.ceil(document.documentElement.scrollHeight / h));
-    var page = Math.min(pages, Math.floor(currentScroll() / h) + 1);
-    return [page, pages];
-  }
-
-  function sendProgress() {
-    var top = currentScroll();
-    var pct = progress();
-    targetTop = top; targetPercent = pct;
-    var pi = pageInfo();
-    var bridge = window.""").append(bridge).append(""";
-    if (bridge && bridge.""").append(onScroll).append(""") {
-      bridge.""").append(onScroll).append("""(top, pct, pi[0], pi[1]);
-    }
-  }
-
-  window.addEventListener("scroll", function () {
-    if (restoring) return;
-    if (pending) clearTimeout(pending);
-    pending = setTimeout(sendProgress, 120);
-  }, { passive: true });
-
-  function applyTargetScroll() {
-    var max = maxScroll();
-    var desired = targetTop;
-    if (desired <= 0 && targetPercent > 0 && max > 0) desired = (targetPercent / 100.0) * max;
-    else if (desired > max && targetPercent > 0 && max > 0) desired = (targetPercent / 100.0) * max;
-    window.scrollTo(0, desired);
-  }
-
-  window.""").append(restoreFn).append(""" = function (top, pct) {
-    restoring = true; targetTop = top || 0; targetPercent = pct || 0;
-    applyTargetScroll();
-    setTimeout(applyTargetScroll, 40);
-    setTimeout(function () { applyTargetScroll(); restoring = false; sendProgress(); }, 180);
-  };
-
-  window.""").append(flushFn).append(""" = function () {
-    if (pending) { clearTimeout(pending); pending = null; }
-    sendProgress();
-  };
-
-  window.addEventListener("load", function () {
-    if (targetTop > 0 || targetPercent > 0) {
-      restoring = true; applyTargetScroll();
-      setTimeout(function () { restoring = false; sendProgress(); }, 60);
-    }
-  });
-
-  window.addEventListener("resize", function () {
-    if (targetPercent > 0) {
-      restoring = true; targetTop = 0; applyTargetScroll();
-      setTimeout(function () { restoring = false; sendProgress(); }, 80);
-    }
-  });
-
-  function chapterOf(node) {
-    while (node && node !== document.body) {
-      if (node.classList && node.classList.contains("epub-chapter")) return node;
-      node = node.parentNode;
-    }
-    return null;
-  }
-
-  function offsetIn(root, node, offset) {
-    try {
-      var r = document.createRange();
-      r.selectNodeContents(root);
-      r.setEnd(node, offset);
-      return r.toString().length;
-    } catch (e) { return -1; }
-  }
-
-  function reportSelection() {
-    var sel = window.getSelection();
-    if (!sel || sel.isCollapsed || !sel.rangeCount) return;
-    var range = sel.getRangeAt(0);
-    var chapter = chapterOf(range.startContainer);
-    if (!chapter) return;
-    var index = parseInt(chapter.getAttribute("data-chapter") || "0", 10);
-    var start = offsetIn(chapter, range.startContainer, range.startOffset);
-    var end = offsetIn(chapter, range.endContainer, range.endOffset);
-    if (start < 0 || end <= start) return;
-    var text = sel.toString().trim();
-    if (!text.length) return;
-    var bridge = window.""").append(bridge).append(""";
-    if (bridge && bridge.""").append(onSelection).append(""") {
-      bridge.""").append(onSelection).append("""(index, start, end, text.substring(0, 2000));
-    }
-  }
-
-  document.addEventListener("selectionchange", function () {
-    if (selectionTimer) clearTimeout(selectionTimer);
-    selectionTimer = setTimeout(reportSelection, 220);
-  });
-
-  function textNodesInRange(range) {
-    var chapter = chapterOf(range.startContainer);
-    if (!chapter) return [];
-    var walker = document.createTreeWalker(chapter, NodeFilter.SHOW_TEXT, null);
-    var nodes = [], n;
-    while ((n = walker.nextNode())) {
-      var r = document.createRange();
-      r.selectNodeContents(n);
-      if (r.compareBoundaryPoints(Range.END_TO_START, range) > 0 &&
-          r.compareBoundaryPoints(Range.START_TO_END, range) < 0) nodes.push(n);
-    }
-    return nodes;
-  }
-
-  window.White = window.White || {};
-  window.White.fontSize = function (px) {
-    document.documentElement.style.setProperty("--wh-font-size", px + "px");
-  };
-  window.White.clearSelection = function () {
-    var sel = window.getSelection();
-    if (sel) sel.removeAllRanges();
-  };
-  window.White.jumpToChapter = function (index) {
-    var el = document.getElementById("chapter-" + index);
-    if (el) { el.scrollIntoView({ block: "start" }); }
-  };
-  window.White.jumpToHighlight = function (id) {
-    var el = document.querySelector("mark[data-hl=\"" + id + "\"]");
-    if (!el) return false;
-    el.scrollIntoView({ block: "center" });
-    el.classList.add("wh-flash");
-    setTimeout(function () { el.classList.remove("wh-flash"); }, 1400);
-    return true;
-  };
-  window.White.applyHighlights = function (json) {
-    var marks = document.querySelectorAll("mark.wh-hl");
-    for (var i = 0; i < marks.length; i++) {
-      var m = marks[i];
-      var t = document.createTextNode(m.textContent);
-      if (m.parentNode) { m.parentNode.replaceChild(t, m); m.parentNode.normalize(); }
-    }
-    var list = [];
-    try { list = JSON.parse(json || "[]"); } catch (e) { return; }
-    var byChapter = {};
-    list.forEach(function (h) { (byChapter[h.c] = byChapter[h.c] || []).push(h); });
-    Object.keys(byChapter).forEach(function (key) {
-      var chapter = document.getElementById("chapter-" + key);
-      if (!chapter) return;
-      var items = byChapter[key].slice().sort(function (a, b) { return b.s - a.s; });
-      items.forEach(function (h) {
-        try {
-          var walker = document.createTreeWalker(chapter, NodeFilter.SHOW_TEXT, null);
-          var nodesInfo = [], total = 0, n;
-          while ((n = walker.nextNode())) {
-            nodesInfo.push({ node: n, start: total, end: total + n.nodeValue.length });
-            total += n.nodeValue.length;
-          }
-          for (var k = nodesInfo.length - 1; k >= 0; k--) {
-            var info = nodesInfo[k];
-            if (info.end <= h.s || info.start >= h.e) continue;
-            var localStart = Math.max(0, h.s - info.start);
-            var localEnd = Math.min(info.node.nodeValue.length, h.e - info.start);
-            if (localEnd <= localStart) continue;
-            var r = document.createRange();
-            r.setStart(info.node, localStart);
-            r.setEnd(info.node, localEnd);
-            var mark = document.createElement("mark");
-            mark.className = "wh-hl";
-            mark.setAttribute("data-hl", h.id);
-            mark.style.backgroundColor = h.color;
-            mark.style.color = "inherit";
-            r.surroundContents(mark);
-          }
-      });
-    });
-  };
-})();
-</script>
-</body>
-</html>
-""")
+    private fun appendDocumentTail(html: StringBuilder) {
+        html.append("</body>")
+        html.append("</html>")
     }
 
     private fun readChapterText(file: File): String {

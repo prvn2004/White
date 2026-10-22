@@ -17,6 +17,7 @@ import java.io.File
 class BookshelfAdapter(
     private val coverWidthPx: Int,
     private val coverHeightPx: Int,
+    private val itemHeightPx: Int,
     private val onBookClick: (Book) -> Unit,
     private val onBookLongClick: (Book) -> Unit
 ) : RecyclerView.Adapter<BookshelfAdapter.BookHolder>() {
@@ -33,6 +34,9 @@ class BookshelfAdapter(
         val view = LayoutInflater.from(parent.context)
             .inflate(R.layout.item_book, parent, false)
         val holder = BookHolder(view)
+        val rootParams = holder.itemView.layoutParams
+        rootParams.height = itemHeightPx
+        holder.itemView.layoutParams = rootParams
         val containerParams = holder.coverContainer.layoutParams
         containerParams.height = coverHeightPx
         holder.coverContainer.layoutParams = containerParams

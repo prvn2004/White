@@ -88,7 +88,6 @@ class MainActivity : AppCompatActivity() {
 
     private fun setupBookshelf() {
         bookshelf.layoutManager = GridLayoutManager(this, 3)
-        bookshelf.addItemDecoration(ShelfDecoration(this))
         bookshelf.itemAnimator = null
         rebuildAdapterForScreenWidth()
     }
@@ -96,9 +95,16 @@ class MainActivity : AppCompatActivity() {
     private fun rebuildAdapterForScreenWidth() {
         val columnWidth = (resources.displayMetrics.widthPixels / 3 - dp(22)).coerceAtLeast(120)
         val coverHeight = (columnWidth * 1.5f).toInt()
+        val itemHeight = coverHeight + dp(72)
+        val rowHeight = itemHeight + dp(22)
+        while (bookshelf.itemDecorationCount > 0) {
+            bookshelf.removeItemDecorationAt(0)
+        }
+        bookshelf.addItemDecoration(ShelfDecoration(this, rowHeight))
         adapter = BookshelfAdapter(
             coverWidthPx = columnWidth,
             coverHeightPx = coverHeight,
+            itemHeightPx = itemHeight,
             onBookClick = { book -> openReader(book.id) },
             onBookLongClick = { book -> confirmRemove(book) }
         )
@@ -130,7 +136,7 @@ class MainActivity : AppCompatActivity() {
         adapter.submit(books)
         if (books.isEmpty()) {
             emptyState.visibility = View.VISIBLE
-            bookshelf.visibility = View.INVISIBLE
+            bookshelf.visibility = View.VISIBLE
             libraryCount.text = ""
         } else {
             emptyState.visibility = View.GONE

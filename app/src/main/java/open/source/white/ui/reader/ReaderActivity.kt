@@ -1,6 +1,7 @@
 package open.source.white.ui.reader
 
 import android.annotation.SuppressLint
+import android.content.pm.ApplicationInfo
 import android.content.res.Configuration
 import android.graphics.Color
 import android.graphics.Typeface
@@ -48,6 +49,7 @@ import open.source.white.model.Highlight
 import open.source.white.parser.EpubParser
 import org.json.JSONArray
 import org.json.JSONObject
+import org.json.JSONTokener
 import java.io.File
 import java.io.FileInputStream
 import java.text.SimpleDateFormat
@@ -61,7 +63,7 @@ class ReaderActivity : AppCompatActivity() {
     private lateinit var highlightsRepository: HighlightsRepository
     private lateinit var book: Book
     private lateinit var root: FrameLayout
-    private lateinit var webView: WebView
+    private lateinit var webView: HighlightWebView
     private lateinit var brightnessController: LeftEdgeBrightnessController
 
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -120,6 +122,9 @@ class ReaderActivity : AppCompatActivity() {
         setContentView(R.layout.activity_reader)
         root = findViewById(R.id.readerRoot)
         webView = findViewById(R.id.readerWebView)
+        webView.onHighlightRequested = {
+            mainHandler.post { showHighlightColorDialog() }
+        }
 
         brightnessController = LeftEdgeBrightnessController(
             activity = this,
@@ -391,7 +396,7 @@ class ReaderActivity : AppCompatActivity() {
             ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
         ).apply {
             gravity = Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
-            bottomMargin = dp(44)
+            bottomMargin = dp(132)
         })
         selectionBar = holder
     }
@@ -574,6 +579,14 @@ class ReaderActivity : AppCompatActivity() {
         val selection = pendingSelection ?: return
         val text = pendingSelectionText ?: return
         if (text.isBlank()) return
+        getExactHighlights(selection).forEach { duplicate ->
+            if (duplicate.color == selectedColor) {
+                hideSelectionBar()
+                applyHighlightsToPage()
+                return
+            }
+            highlightsRepository.deleteHighlight(book.id, duplicate.id)
+        }
         highlightsRepository.addHighlight(
             bookId = book.id,
             chapterIndex = selection[0],
@@ -588,7 +601,15 @@ class ReaderActivity : AppCompatActivity() {
         android.widget.Toast.makeText(this, "Highlight saved", android.widget.Toast.LENGTH_SHORT).show()
     }
 
-    private fun applyHighlightsToPage() {
+    private fun getExactHighlights(selection: IntArray): List<Highlight> {
+        return highlightsRepository.getHighlights(book.id).filter {
+            it.chapterIndex == selection[0] &&
+                it.startOffset == selection[1] &&
+                it.endOffset == selection[2]
+        }
+    }
+
+    private fun buildHighlightsJson(): String {
         val array = JSONArray()
         highlightsRepository.getHighlights(book.id).forEach { highlight ->
             val obj = JSONObject()
@@ -599,7 +620,11 @@ class ReaderActivity : AppCompatActivity() {
             obj.put("color", String.format(Locale.US, "#%06X", 0xFFFFFF and highlight.color))
             array.put(obj)
         }
-        val argument = JSONObject.quote(array.toString())
+        return array.toString()
+    }
+
+    private fun applyHighlightsToPage() {
+        val argument = JSONObject.quote(buildHighlightsJson())
         webView.evaluateJavascript(
             "window.White && window.White.applyHighlights && window.White.applyHighlights(" +
                 argument + ");", null
@@ -609,8 +634,88 @@ class ReaderActivity : AppCompatActivity() {
     private fun applyFontSize() {
         webView.evaluateJavascript(
             "window.White && window.White.fontSize && window.White.fontSize(" +
-                fontSize.toString() + ");", null
+                fontSize.toString() + ", true);", null
         )
+    }
+
+    private fun showHighlightColorDialog() {
+        if (pendingSelection == null || pendingSelectionText.isNullOrBlank()) {
+            webView.evaluateJavascript(
+                "(function(){var s=window.White&&window.White.getSelection?" +
+                    "window.White.getSelection():null;return s?JSON.stringify(s):'';})()"
+            ) { result ->
+                val captured = parseSelection(result)
+                if (captured == null) {
+                    android.widget.Toast.makeText(
+                        this,
+                        "Select some text first",
+                        android.widget.Toast.LENGTH_SHORT
+                    ).show()
+                    return@evaluateJavascript
+                }
+                pendingSelection = intArrayOf(captured.chapter, captured.start, captured.end)
+                pendingSelectionText = captured.text
+                showHighlightColorDialog()
+            }
+            return
+        }
+        selectionBar.visibility = View.GONE
+        val container = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
+            setPadding(dp(16), dp(18), dp(16), dp(18))
+        }
+        val colors = listOf(
+            AppConstants.HIGHLIGHT_YELLOW,
+            AppConstants.HIGHLIGHT_GREEN,
+            AppConstants.HIGHLIGHT_BLUE,
+            AppConstants.HIGHLIGHT_PINK
+        )
+        val dialog = AlertDialog.Builder(this)
+            .setTitle("Highlight color")
+            .setView(container)
+            .setNegativeButton("Cancel", null)
+            .create()
+        colors.forEach { color ->
+            val swatch = View(this).apply {
+                background = GradientDrawable().apply {
+                    setColor(color)
+                    shape = GradientDrawable.OVAL
+                    setStroke(dp(2), Color.parseColor("#E2E8F0"))
+                }
+            }
+            val params = LinearLayout.LayoutParams(dp(46), dp(46))
+            params.marginEnd = dp(14)
+            swatch.setOnClickListener {
+                selectedColor = color
+                highlightsRepository.setLastHighlightColor(color)
+                applySelectionHighlight()
+                dialog.dismiss()
+            }
+            container.addView(swatch, params)
+        }
+        dialog.show()
+    }
+
+    private fun parseSelection(result: String?): CapturedSelection? {
+        if (result.isNullOrBlank() || result == "null") return null
+        return try {
+            val value = JSONTokener(result).nextValue()
+            val json = value as? String ?: return null
+            if (json.isBlank()) return null
+            val obj = JSONObject(json)
+            val chapter = obj.optInt("c", -1)
+            val start = obj.optInt("s", -1)
+            val end = obj.optInt("e", -1)
+            val text = obj.optString("text", "")
+            if (chapter < 0 || start < 0 || end <= start || text.isBlank()) {
+                null
+            } else {
+                CapturedSelection(chapter, start, end, text)
+            }
+        } catch (error: Exception) {
+            null
+        }
     }
 
     private fun showFontDialog() {
@@ -674,8 +779,12 @@ class ReaderActivity : AppCompatActivity() {
             .setTitle("Contents")
             .setItems(titles.toTypedArray()) { _, index ->
                 webView.evaluateJavascript(
-                    "window.White && window.White.jumpToChapter && window.White.jumpToChapter(" +
-                        index.toString() + ");", null
+                    "(function(){var e=document.getElementById('chapter-" + index + "');" +
+                        "if(!e){var a=document.querySelectorAll('.epub-chapter');" +
+                        "for(var i=0;i<a.length;i++){if(a[i].getAttribute('data-chapter')=='" +
+                        index + "'){e=a[i];break;}}}" +
+                        "if(e){e.scrollIntoView({block:'start'});return true;}return false;})()",
+                    null
                 )
             }
             .setNegativeButton("Close", null)
@@ -774,6 +883,9 @@ class ReaderActivity : AppCompatActivity() {
 
     @SuppressLint("SetJavaScriptEnabled")
     private fun configureWebView() {
+        if ((applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0) {
+            WebView.setWebContentsDebuggingEnabled(true)
+        }
         webView.setBackgroundColor(Color.WHITE)
         webView.isVerticalScrollBarEnabled = false
         webView.isHorizontalScrollBarEnabled = false
@@ -895,7 +1007,22 @@ class ReaderActivity : AppCompatActivity() {
                 hideChrome()
             }
         }
+
+        @Keep
+        @JavascriptInterface
+        fun onSelectionCleared() {
+            mainHandler.post {
+                if (::selectionBar.isInitialized) selectionBar.visibility = View.GONE
+            }
+        }
     }
+
+    private data class CapturedSelection(
+        val chapter: Int,
+        val start: Int,
+        val end: Int,
+        val text: String
+    )
 
     private inner class ReaderClient(
         private val root: File,
@@ -918,13 +1045,13 @@ class ReaderActivity : AppCompatActivity() {
         }
 
         override fun onPageFinished(view: WebView, url: String) {
-            val fn = AppConstants.JS_FUNC_RESTORE
-            view.evaluateJavascript(
-                "if (window." + fn + ") { window." + fn + "(" +
-                    lastScroll.toString() + ", " + lastProgress.toString() + "); }", null
+            val script = ReaderScript.build(
+                scroll = lastScroll,
+                progress = lastProgress,
+                fontSize = fontSize,
+                highlightsJson = buildHighlightsJson()
             )
-            applyFontSize()
-            applyHighlightsToPage()
+            view.evaluateJavascript(script, null)
         }
 
         private fun serve(uri: Uri): WebResourceResponse? {

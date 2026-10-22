@@ -95,6 +95,7 @@ object AppConstants {
     const val JS_BRIDGE_NAME = "AndroidBridge"
     const val JS_METHOD_ON_SCROLL = "onScrollProgress"
     const val JS_METHOD_ON_SELECTION = "onTextSelected"
+    const val JS_METHOD_ON_SELECTION_CLEARED = "onSelectionCleared"
     const val JS_FUNC_RESTORE = "restorePosition"
     const val JS_FUNC_FLUSH = "flushReaderProgress"
     const val BLANK_URL = "about:blank"

@@ -3,6 +3,17 @@
 All notable changes to White are documented in this file.
 This project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.2.0] - 2026-10-22
+
+### Fixed
+- **Highlight in selection menu**: Added a custom HighlightWebView that injects a dedicated "Highlight" action into Android's native text-selection action mode alongside Copy and Share.
+- **Runtime script injection**: Injected the reader bridge script at runtime via evaluateJavascript instead of inline HTML script tags, preventing CSP blocking and fixing page counting, progress tracking, dynamic font size adjustments, and contents jumping.
+- **Accurate pagination**: Page calculation now considers scrollable span relative to viewport height across all document sizes instead of reporting p. 1 / 1.
+- **Position preservation**: The reader script anchors and restores scroll position and percentage across book closes, app reopens, and cold launches.
+- **Table of contents jump**: Chapter jump looks up both ID and chapter index selectors, jumping directly to the requested chapter heading.
+- **Font size scaling**: Dynamically adjusts document font size via CSS variables while maintaining viewport anchor position.
+- **Continuous bookshelf layout**: Empty bookshelf and partial rows now show full wooden shelf lines across the entire view, maintaining the physical bookshelf aesthetic regardless of book count.
+
 ## [1.1.0] - 2026-10-22
 
 ### Added
