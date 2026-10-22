@@ -2,6 +2,9 @@ package open.source.white.data
 
 import android.content.Context
 import android.content.SharedPreferences
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import open.source.white.common.AppConstants
 import open.source.white.model.Book
 import org.json.JSONArray
@@ -218,6 +221,43 @@ class BookRepository private constructor(context: Context) {
                 persistBooksLocked()
             }
         }
+    }
+
+    fun addReadingTime(id: String, millis: Long) {
+        if (millis <= 0L) return
+        val safeMillis = millis.coerceAtMost(6L * 60L * 60L * 1000L)
+        val day = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
+        synchronized(lock) {
+            val index = cachedBooks.indexOfFirst { it.id == id }
+            if (index < 0) return
+            val current = cachedBooks[index]
+            val days = current.dailyReadingMillis.toMutableMap()
+            days[day] = (days[day] ?: 0L) + safeMillis
+            cachedBooks[index] = current.copy(
+                totalReadingMillis = current.totalReadingMillis + safeMillis,
+                dailyReadingMillis = days,
+                lastReadTimestamp = System.currentTimeMillis()
+            )
+        }
+        ioExecutor.execute {
+            synchronized(lock) {
+                persistBooksLocked()
+            }
+        }
+    }
+
+    fun getFontSize(): Int {
+        return prefs.getInt(AppConstants.KEY_FONT_SIZE, AppConstants.DEFAULT_FONT_SIZE)
+            .coerceIn(AppConstants.MIN_FONT_SIZE, AppConstants.MAX_FONT_SIZE)
+    }
+
+    fun setFontSize(size: Int) {
+        prefs.edit()
+            .putInt(
+                AppConstants.KEY_FONT_SIZE,
+                size.coerceIn(AppConstants.MIN_FONT_SIZE, AppConstants.MAX_FONT_SIZE)
+            )
+            .apply()
     }
 
     fun deleteBook(id: String): Boolean {

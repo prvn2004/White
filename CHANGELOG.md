@@ -3,6 +3,23 @@
 All notable changes to White are documented in this file.
 This project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.1.0] - 2026-10-22
+
+### Added
+- Text highlights in four colors, with a per-book side panel. Tapping a highlight jumps to and flashes the marked passage.
+- Adjustable reading text size, stored across sessions.
+- Slim reading stats bar: time spent, page / total pages, and progress percent, each tappable. Time opens per-day reading logs, page opens the table of contents, and progress opens highlights.
+- Reading-time tracking per book and per day, with library-wide totals.
+- PDF, Markdown, HTML, XML/FB2, and plain-text import alongside EPUB.
+- About and Reading stats dialogs in the shelf overflow menu, with credits.
+- New adaptive launcher icon: a white page on blue.
+
+### Fixed
+- CSP nonce mismatch between the document head and inline script, which disabled progress reporting, font sizing, and highlights.
+- Cross-chapter and same-page links now resolve to prefixed anchors and navigate inside the continuous document.
+- Chapter titles prefer real headings instead of repeating the book title.
+- Highlight anchoring uses direct text offsets, so marks apply reliably.
+
 ## [1.0.1] - 2026-10-22
 
 ### Fixed

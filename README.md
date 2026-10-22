@@ -1,82 +1,65 @@
 # White
 
-A fast, minimal EPUB reader for Android with a clean white-and-blue theme.
+A calm, offline reader for Android. White page, blue accents, and a reading surface that gets out of the way.
 
 ## Features
 
-- **Bookshelf**: 3-column shelf with extracted cover art, generated blue covers when a book has no cover image, and reading progress badges. Long-press any book to remove it.
-- **One-tap import**: Tap the blue **+** button in the bottom-right corner to import any `.epub` file into local app storage.
-- **Pure-page continuous reader**: Opens the entire book as a single infinitely scrolling white page with zero buttons, headers, or system status/navigation bars visible.
-- **Left-edge brightness control**: Slide vertically along the left edge of the screen while reading to adjust screen brightness smoothly; your brightness level is remembered across sessions.
-- **Auto-resume**: Remembers both the last open book and your exact scroll position so reopening the app takes you straight back to the page you were reading.
+- **Bookshelf**: 3-column shelf with cover art, generated covers, progress badges, and reading-time totals. Long-press to remove a book.
+- **Formats**: EPUB, PDF, Markdown, HTML, XML/FB2, and plain text.
+- **Pure-page reader**: one continuous, infinitely scrolling white page with no visible chrome. Tap once to reveal a slim toolbar; it fades on its own.
+- **Highlights**: select text, pick a color, and highlight. Every highlight appears in the side panel; tap one to jump to it.
+- **Display**: adjustable text size (14–30 px), remembered across books.
+- **Reading stats bar**: a slim bottom bar shows time spent, current page / total pages, and progress percent.
+  - Tap the time to see total and per-day reading logs.
+  - Tap the page count for the table of contents.
+  - Tap the percentage to open the highlights panel.
+- **Left-edge brightness**: slide vertically along the left edge to adjust screen brightness; the level is remembered.
+- **Auto-resume**: reopening the app returns to the last book at the saved position.
+- **About and stats**: an overflow menu on the shelf with credits and library-wide reading time.
+
+The app has no accounts and no trackers. The INTERNET permission is used only so WebView hands local asset requests to the app interceptor; every request is served from local storage, and the page CSP blocks all other origins.
 
 ## Download & Install
 
-Prebuilt, signed installable packages are built automatically by GitHub Actions on every push to `main` and on version tags:
+Signed packages are published by GitHub Actions on every push to main and on version tags:
 
-- **Releases page**: Download `white-v1.0.0.apk` (direct install on any Android 7.0+ phone) or `white-v1.0.0.aab` (Android App Bundle).
-- **Actions tab**: Every `main` and tag workflow run publishes `white-apk` and `white-aab` artifacts.
+- **Releases page**: download white-v1.1.0.apk (install on Android 7.0+) or the .aab bundle.
+- **Actions tab**: every release run publishes white-apk and white-aab artifacts.
 
 ## Offline Setup & Build
 
-### Prerequisites
+Requirements: JDK 21 and Android SDK Platform 36.
 
-- **JDK 21** (configured in `gradle/gradle-daemon-jvm.properties`)
-- **Android SDK Platform 36** (minimum supported device is Android 7.0 / API 24)
+1. Create local.properties in the project root:
+   sdk.dir=/absolute/path/to/Android/Sdk
+2. Build a debug APK:
+   ./gradlew assembleDebug
+3. Build signed release outputs (requires the four SIGNING_* environment variables):
+   ./gradlew assembleRelease bundleRelease
 
-### 1. Configure Android SDK path
+Outputs live under app/build/outputs/apk and app/build/outputs/bundle.
 
-Create `local.properties` in the project root (ignored by Git):
+After one online build, offline builds work with:
 
-```properties
-sdk.dir=/absolute/path/to/Android/Sdk
-```
+    ./gradlew assembleDebug --offline
 
-### 2. Build Debug APK (No Signing Setup Required)
+## Project Layout
 
-```bash
-./gradlew assembleDebug
-```
+    app/src/main/java/open/source/white/
+      MainActivity.kt                         Bookshelf, import, About, library stats
+      common/AppConstants.kt                  Storage, bridge, format, and gesture constants
+      data/BookRepository.kt                  Atomic library persistence and reading time
+      data/HighlightsRepository.kt            Per-book highlight storage
+      model/Book.kt                           Book metadata, progress, reading history
+      model/Highlight.kt                      Highlight anchor, color, and text
+      parser/EpubParser.kt                    EPUB/PDF/Markdown/HTML/XML/text import, sanitizer, reader builder
+      ui/bookshelf/                           Adapter, cover loader, shelf decoration
+      ui/reader/ReaderActivity.kt             Reader, stats bar, highlights, fonts, contents
+      ui/reader/LeftEdgeBrightnessController.kt
 
-Output: `app/build/outputs/apk/debug/app-debug.apk` (installable directly via Android Studio or `adb install`).
+## Tests
 
-### 3. Build Signed Release APK & AAB
+Reader and parser changes are verified on an emulator against a Calibre EPUB, a PDF, Markdown, and plain text fixtures, including import, rendering, scrolling, highlighting, jumping, font changes, and resume. CI runs lint and builds signed APK/AAB artifacts on every release.
 
-Release builds use four environment variables for signing (`SIGNING_STORE_FILE`, `SIGNING_STORE_PASSWORD`, `SIGNING_KEY_ALIAS`, `SIGNING_KEY_PASSWORD`):
-
-```bash
-export SIGNING_STORE_FILE=/path/to/release.p12
-export SIGNING_STORE_PASSWORD=your_store_password
-export SIGNING_KEY_ALIAS=your_key_alias
-export SIGNING_KEY_PASSWORD=your_key_password
-./gradlew assembleRelease bundleRelease
-```
-
-Outputs:
-- Signed Release APK: `app/build/outputs/apk/release/app-release.apk`
-- Signed Release AAB: `app/build/outputs/bundle/release/app-release.aab`
-
-### 4. Building Completely Offline
-
-After running one Gradle build to populate your local Gradle cache (`~/.gradle`), you can build at any time without an internet connection:
-
-```bash
-./gradlew assembleDebug --offline
-```
-
-## Project Structure
-
-```text
-app/src/main/java/open/source/white/
-  MainActivity.kt                           Bookshelf screen, EPUB picker, auto-resume
-  common/AppConstants.kt                    Centralized storage, bridge, and gesture constants
-  data/BookRepository.kt                    Synced atomic JSON persistence and backup recovery
-  model/Book.kt                             Immutable book metadata and reading progress model
-  parser/EpubParser.kt                      Safe Zip extraction, OPF parser, allowlist HTML builder
-  ui/bookshelf/BookshelfAdapter.kt          RecyclerView adapter for book covers and progress pills
-  ui/bookshelf/CoverLoader.kt               Downsampled RGB_565 LruCache cover bitmap loader
-  ui/bookshelf/ShelfDecoration.kt           Custom Canvas shelf board decoration
-  ui/reader/LeftEdgeBrightnessController.kt Left-edge vertical drag screen brightness controller
-  ui/reader/ReaderActivity.kt               Full-screen immersive WebView reader and asset server
-```
+Built by Praveen Kumar together with Codex (TARS).
 

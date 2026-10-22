@@ -3,16 +3,28 @@
     <string name="app_name">White</string>
     <string name="library_title">My Library</string>
     <string name="empty_title">Your shelf is empty</string>
-    <string name="empty_subtitle">Tap + to add an EPUB</string>
+    <string name="empty_subtitle">Tap + to add a book</string>
     <string name="add_book">Add book</string>
     <string name="importing">Opening book…</string>
-    <string name="import_failed">That file could not be opened as an EPUB</string>
+    <string name="import_failed">That file could not be opened</string>
     <string name="remove_failed">Could not remove book from library</string>
     <string name="remove_book_message">This deletes the saved copy of this book from White.</string>
     <string name="cancel">Cancel</string>
     <string name="remove">Remove</string>
     <string name="progress_percent">%1$d%%</string>
     <string name="unknown_author">Unknown Author</string>
+    <string name="more_options">More options</string>
+    <string name="about">About White</string>
+    <string name="reading_stats">Reading stats</string>
+    <string name="display_settings">Display</string>
+    <string name="about_body">White is a calm, offline reader for EPUB, PDF, Markdown, HTML, XML and plain text books.
+
+Version %1$s
+
+Built by Praveen Kumar together with Codex (TARS).
+Source: github.com/prvn2004/White
+
+No accounts, no trackers. Your library and highlights stay on this device.</string>
     <plurals name="book_count">
         <item quantity="one">%1$d book</item>
         <item quantity="other">%1$d books</item>

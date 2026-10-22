@@ -13,6 +13,9 @@ object AppConstants {
     const val COVER_DIR = "cover"
     const val SOURCE_EPUB_FILE = "source.epub"
     const val READER_HTML_FILE = "reader.html"
+    const val HIGHLIGHTS_FILE = "highlights.json"
+    const val SOURCE_FILE = "source"
+    const val PDF_PAGES_DIR = "pages"
 
     // Book JSON fields
     const val FIELD_ID = "id"
@@ -23,8 +26,42 @@ object AppConstants {
     const val FIELD_COVER_PATH = "coverPath"
     const val FIELD_SCROLL_POS = "scrollPosition"
     const val FIELD_PROGRESS = "progressPercent"
+    const val FIELD_FORMAT = "format"
+    const val FIELD_TOTAL_CHAPTERS = "totalChapters"
+    const val FIELD_CHAPTER_TITLES = "chapterTitles"
+    const val FIELD_TOTAL_READING_MS = "totalReadingMillis"
+    const val FIELD_DAILY_READING_MS = "dailyReadingMillis"
     const val FIELD_ADDED_AT = "addedTimestamp"
     const val FIELD_LAST_READ_AT = "lastReadTimestamp"
+
+    // Highlight fields
+    const val FIELD_HIGHLIGHT_ID = "id"
+    const val FIELD_HIGHLIGHT_CHAPTER = "chapterIndex"
+    const val FIELD_HIGHLIGHT_START = "startOffset"
+    const val FIELD_HIGHLIGHT_END = "endOffset"
+    const val FIELD_HIGHLIGHT_TEXT = "text"
+    const val FIELD_HIGHLIGHT_COLOR = "color"
+    const val FIELD_HIGHLIGHT_CREATED = "createdAt"
+
+    val HIGHLIGHT_YELLOW = 0xFFFFE082.toInt()
+    val HIGHLIGHT_GREEN = 0xFFB2DFDB.toInt()
+    val HIGHLIGHT_BLUE = 0xFFBBDEFB.toInt()
+    val HIGHLIGHT_PINK = 0xFFF8BBD0.toInt()
+
+    // Supported formats
+    const val FORMAT_EPUB = "EPUB"
+    const val FORMAT_PDF = "PDF"
+    const val FORMAT_MARKDOWN = "MARKDOWN"
+    const val FORMAT_TEXT = "TEXT"
+    const val FORMAT_HTML = "HTML"
+    const val FORMAT_XML = "XML"
+
+    // Reader preferences
+    const val KEY_FONT_SIZE = "key_font_size"
+    const val KEY_HIGHLIGHT_COLOR = "key_highlight_color"
+    const val MIN_FONT_SIZE = 14
+    const val MAX_FONT_SIZE = 30
+    const val DEFAULT_FONT_SIZE = 19
 
     // Defaults & archive constants
     const val DEFAULT_TITLE = "Untitled Book"
@@ -57,6 +94,7 @@ object AppConstants {
     const val VIRTUAL_READER_URL = "$VIRTUAL_ASSET_ORIGIN$VIRTUAL_READER_PATH"
     const val JS_BRIDGE_NAME = "AndroidBridge"
     const val JS_METHOD_ON_SCROLL = "onScrollProgress"
+    const val JS_METHOD_ON_SELECTION = "onTextSelected"
     const val JS_FUNC_RESTORE = "restorePosition"
     const val JS_FUNC_FLUSH = "flushReaderProgress"
     const val BLANK_URL = "about:blank"

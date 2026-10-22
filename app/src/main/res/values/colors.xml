@@ -9,5 +9,6 @@
     <color name="text_secondary">#FF6B7A90</color>
     <color name="shelf_board">#FFE3EDFA</color>
     <color name="shelf_edge">#FFC9DCF5</color>
+    <color name="icon_background">#FF2563EB</color>
 </resources>
 

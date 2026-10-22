@@ -5,7 +5,7 @@ plugins {
 val resolvedVersionName = (project.findProperty("versionName") as? String)
     ?.takeIf { it.isNotBlank() }
     ?: System.getenv("APP_VERSION_NAME")?.takeIf { it.isNotBlank() }
-    ?: "1.0.0"
+    ?: "1.1.0"
 
 val resolvedVersionCode = (project.findProperty("versionCode") as? String)
     ?.toIntOrNull()

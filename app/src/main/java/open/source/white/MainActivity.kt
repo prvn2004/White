@@ -4,6 +4,7 @@ import android.content.Intent
 import android.content.res.Configuration
 import android.net.Uri
 import android.os.Bundle
+import android.provider.OpenableColumns
 import android.view.View
 import android.widget.LinearLayout
 import android.widget.TextView
@@ -30,6 +31,9 @@ import open.source.white.ui.bookshelf.BookshelfAdapter
 import open.source.white.ui.bookshelf.ShelfDecoration
 import open.source.white.ui.reader.ReaderActivity
 import java.io.File
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 class MainActivity : AppCompatActivity() {
 
@@ -42,9 +46,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var addButton: FloatingActionButton
 
     private val pickBook = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        if (uri != null) {
-            importBook(uri)
-        }
+        if (uri != null) importBook(uri)
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -56,9 +58,8 @@ class MainActivity : AppCompatActivity() {
         bindViews()
         setupBookshelf()
 
-        addButton.setOnClickListener {
-            pickBook.launch(arrayOf(AppConstants.MIME_ANY))
-        }
+        addButton.setOnClickListener { pickBook.launch(arrayOf("*/*")) }
+        findViewById<TextView>(R.id.menuButton).setOnClickListener { showMoreMenu() }
 
         refresh()
         autoOpenLastBookIfNeeded(savedInstanceState)
@@ -68,7 +69,6 @@ class MainActivity : AppCompatActivity() {
         val controller = WindowCompat.getInsetsController(window, window.decorView)
         controller.isAppearanceLightStatusBars = true
         controller.isAppearanceLightNavigationBars = true
-
         val root = findViewById<View>(R.id.rootView)
         ViewCompat.setOnApplyWindowInsetsListener(root) { view, insets ->
             val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
@@ -116,11 +116,8 @@ class MainActivity : AppCompatActivity() {
     private fun autoOpenLastBookIfNeeded(savedInstanceState: Bundle?) {
         if (savedInstanceState != null) return
         val lastBookId = repository.getLastOpenedBookId() ?: return
-        if (repository.getBook(lastBookId) != null) {
-            openReader(lastBookId)
-        } else {
-            repository.setLastOpenedBookId(null)
-        }
+        if (repository.getBook(lastBookId) != null) openReader(lastBookId)
+        else repository.setLastOpenedBookId(null)
     }
 
     override fun onResume() {
@@ -138,42 +135,44 @@ class MainActivity : AppCompatActivity() {
         } else {
             emptyState.visibility = View.GONE
             bookshelf.visibility = View.VISIBLE
-            libraryCount.text = resources.getQuantityString(
-                R.plurals.book_count,
-                books.size,
-                books.size
-            )
+            libraryCount.text = resources.getQuantityString(R.plurals.book_count, books.size, books.size)
         }
     }
 
     private fun importBook(uri: Uri) {
         importOverlay.visibility = View.VISIBLE
         addButton.isEnabled = false
-
+        val displayName = resolveDisplayName(uri)
         lifecycleScope.launch {
             val savedBook: Book? = withContext(Dispatchers.IO + NonCancellable) {
                 try {
-                    val parsed = EpubParser.parseBookFromUri(applicationContext, uri)
-                    if (repository.saveBook(parsed)) {
-                        parsed
-                    } else {
-                        File(parsed.unpackedDirPath).parentFile?.deleteRecursively()
+                    val parsed = EpubParser.parseBookFromUri(applicationContext, uri, displayName)
+                    if (repository.saveBook(parsed)) parsed
+                    else {
+                        File(parsed.unpackedDirPath).deleteRecursively()
                         null
                     }
                 } catch (error: Exception) {
                     null
                 }
             }
-
             importOverlay.visibility = View.GONE
             addButton.isEnabled = true
-
             if (savedBook == null) {
                 Toast.makeText(this@MainActivity, R.string.import_failed, Toast.LENGTH_LONG).show()
                 return@launch
             }
-
             refresh()
+        }
+    }
+
+    private fun resolveDisplayName(uri: Uri): String? {
+        return try {
+            contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
+                if (cursor.moveToFirst()) cursor.getString(0) else null
+            } ?: uri.lastPathSegment
+        } catch (error: Exception) {
+            uri.lastPathSegment
         }
     }
 
@@ -183,13 +182,74 @@ class MainActivity : AppCompatActivity() {
             .setMessage(R.string.remove_book_message)
             .setNegativeButton(R.string.cancel, null)
             .setPositiveButton(R.string.remove) { _, _ ->
-                if (repository.deleteBook(book.id)) {
-                    refresh()
-                } else {
-                    Toast.makeText(this, R.string.remove_failed, Toast.LENGTH_SHORT).show()
-                }
+                if (repository.deleteBook(book.id)) refresh()
+                else Toast.makeText(this, R.string.remove_failed, Toast.LENGTH_SHORT).show()
             }
             .show()
+    }
+
+    private fun showMoreMenu() {
+        val options = arrayOf(
+            getString(R.string.about),
+            getString(R.string.reading_stats)
+        )
+        AlertDialog.Builder(this)
+            .setTitle(getString(R.string.app_name))
+            .setItems(options) { _, which ->
+                when (which) {
+                    0 -> showAbout()
+                    1 -> showReadingStats()
+                }
+            }
+            .setNegativeButton(R.string.cancel, null)
+            .show()
+    }
+
+    private fun showAbout() {
+        val version = try {
+            packageManager.getPackageInfo(packageName, 0).versionName ?: "1.0.0"
+        } catch (error: Exception) {
+            "1.0.0"
+        }
+        AlertDialog.Builder(this)
+            .setTitle(R.string.about)
+            .setMessage(getString(R.string.about_body, version))
+            .setPositiveButton("Close", null)
+            .show()
+    }
+
+    private fun showReadingStats() {
+        val books = repository.getAllBooks()
+        if (books.isEmpty()) {
+            AlertDialog.Builder(this)
+                .setTitle(R.string.reading_stats)
+                .setMessage("No reading sessions yet.")
+                .setPositiveButton("Close", null)
+                .show()
+            return
+        }
+        val lines = mutableListOf<String>()
+        val total = books.sumOf { it.totalReadingMillis }
+        lines.add("Total across library: " + formatDuration(total))
+        lines.add("")
+        books.sortedByDescending { it.totalReadingMillis }.take(10).forEach { book ->
+            lines.add(book.title)
+            lines.add("   " + formatDuration(book.totalReadingMillis))
+        }
+        AlertDialog.Builder(this)
+            .setTitle(R.string.reading_stats)
+            .setMessage(lines.joinToString("\n"))
+            .setPositiveButton("Close", null)
+            .show()
+    }
+
+    private fun formatDuration(millis: Long): String {
+        if (millis <= 0) return "0m"
+        val minutes = (millis / 60000L).toInt()
+        val hours = minutes / 60
+        val rest = minutes % 60
+        return if (hours > 0) hours.toString() + "h " + String.format(Locale.US, "%02d", rest) + "m"
+        else rest.toString() + "m"
     }
 
     private fun openReader(bookId: String) {
@@ -198,8 +258,6 @@ class MainActivity : AppCompatActivity() {
         startActivity(intent)
     }
 
-    private fun dp(value: Int): Int {
-        return (value * resources.displayMetrics.density).toInt()
-    }
+    private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
 }
 
