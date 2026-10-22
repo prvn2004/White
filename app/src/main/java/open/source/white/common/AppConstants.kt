@@ -5,7 +5,6 @@ object AppConstants {
     const val PREFS_NAME = "white_reader_prefs"
     const val KEY_LAST_OPENED_BOOK_ID = "key_last_opened_book_id"
     const val KEY_READER_BRIGHTNESS = "key_reader_brightness"
-    const val KEY_DARK_THEME = "key_dark_theme"
     const val BOOKS_JSON_FILE = "books.json"
     const val BOOKS_TMP_SUFFIX = ".tmp"
     const val BOOKS_BACKUP_SUFFIX = ".bak"

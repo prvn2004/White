@@ -650,7 +650,6 @@ class ReaderActivity : AppCompatActivity() {
     }
 
     private fun showHighlightColorDialog() {
-        val isDark = repository.isDarkTheme()
         if (pendingSelection == null || pendingSelectionText.isNullOrBlank()) {
             webView.evaluateJavascript(
                 "(function(){var s=window.White&&window.White.getSelection?" +
@@ -676,7 +675,6 @@ class ReaderActivity : AppCompatActivity() {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER
             setPadding(dp(16), dp(18), dp(16), dp(18))
-            if (isDark) setBackgroundColor(Color.parseColor("#18181B"))
         }
         val colors = listOf(
             AppConstants.HIGHLIGHT_YELLOW,
@@ -711,19 +709,17 @@ class ReaderActivity : AppCompatActivity() {
     }
 
     private fun showHighlightEditDialog(highlightId: String) {
-        val isDark = repository.isDarkTheme()
         val highlight = highlightsRepository.getHighlights(book.id).find { it.id == highlightId } ?: return
         val rootLayout = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(20), dp(16), dp(20), dp(12))
-            if (isDark) setBackgroundColor(Color.parseColor("#18181B"))
         }
         val preview = TextView(this).apply {
             text = highlight.text.replace(Regex("\\s+"), " ").trim()
             textSize = 13f
             maxLines = 3
             ellipsize = TextUtils.TruncateAt.END
-            setTextColor(if (isDark) Color.parseColor("#E5E7EB") else Color.parseColor("#18202C"))
+            setTextColor(Color.parseColor("#18202C"))
             setPadding(0, 0, 0, dp(14))
         }
         rootLayout.addView(preview)
@@ -807,16 +803,14 @@ class ReaderActivity : AppCompatActivity() {
     }
 
     private fun showFontDialog() {
-        val isDark = repository.isDarkTheme()
         val container = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(20), dp(16), dp(20), dp(8))
-            if (isDark) setBackgroundColor(Color.parseColor("#18181B"))
         }
         val label = TextView(this).apply {
             text = "Text size " + fontSize + "px"
             textSize = 14f
-            setTextColor(if (isDark) Color.parseColor("#E5E7EB") else ContextCompat.getColor(this@ReaderActivity, R.color.text_primary))
+            setTextColor(ContextCompat.getColor(this@ReaderActivity, R.color.text_primary))
         }
         val controls = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -841,50 +835,11 @@ class ReaderActivity : AppCompatActivity() {
         container.addView(label)
         container.addView(controls)
 
-        // Add Theme toggle row
-        val themeRow = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            setPadding(0, dp(18), 0, dp(4))
-        }
-        val themeLabel = TextView(this).apply {
-            text = "Reading Theme"
-            textSize = 14f
-            setTextColor(if (isDark) Color.parseColor("#E5E7EB") else ContextCompat.getColor(this@ReaderActivity, R.color.text_primary))
-        }
-        val themeBtn = TextView(this).apply {
-            text = if (isDark) "Black" else "White"
-            textSize = 13f
-            setTypeface(typeface, Typeface.BOLD)
-            gravity = Gravity.CENTER
-            setTextColor(Color.WHITE)
-            background = GradientDrawable().apply {
-                setColor(if (isDark) Color.parseColor("#3F3F46") else ContextCompat.getColor(this@ReaderActivity, R.color.blue_primary))
-                cornerRadius = dp(12).toFloat()
-            }
-            setPadding(dp(16), dp(8), dp(16), dp(8))
-            setOnClickListener {
-                val newDark = !repository.isDarkTheme()
-                repository.setDarkTheme(newDark)
-                applyCurrentTheme()
-                text = if (newDark) "Black" else "White"
-            }
-        }
-        themeRow.addView(themeLabel, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-        themeRow.addView(themeBtn)
-        container.addView(themeRow)
-
         AlertDialog.Builder(this)
             .setTitle("Display")
             .setView(container)
             .setPositiveButton("Done", null)
             .show()
-    }
-
-    private fun applyCurrentTheme() {
-        val isDark = repository.isDarkTheme()
-        webView.setBackgroundColor(if (isDark) Color.BLACK else Color.WHITE)
-        webView.evaluateJavascript("window.White && window.White.theme && window.White.theme($isDark);", null)
     }
 
     private fun fontControl(textValue: String, action: () -> Unit): TextView {
@@ -1043,7 +998,7 @@ class ReaderActivity : AppCompatActivity() {
         if ((applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0) {
             WebView.setWebContentsDebuggingEnabled(true)
         }
-        webView.setBackgroundColor(if (repository.isDarkTheme()) Color.BLACK else Color.WHITE)
+        webView.setBackgroundColor(Color.WHITE)
         webView.isVerticalScrollBarEnabled = false
         webView.isHorizontalScrollBarEnabled = false
         webView.overScrollMode = View.OVER_SCROLL_ALWAYS
@@ -1221,8 +1176,7 @@ class ReaderActivity : AppCompatActivity() {
                 scroll = lastScroll,
                 progress = lastProgress,
                 fontSize = fontSize,
-                highlightsJson = buildHighlightsJson(),
-                isDark = repository.isDarkTheme()
+                highlightsJson = buildHighlightsJson()
             )
             view.evaluateJavascript(script, null)
         }
@@ -1312,11 +1266,11 @@ class ReaderActivity : AppCompatActivity() {
             }
         }
         val scrollerParams = FrameLayout.LayoutParams(
-            dp(56),
+            dp(72),
             FrameLayout.LayoutParams.MATCH_PARENT
         ).apply {
             gravity = Gravity.END
-            setMargins(0, dp(48), dp(4), dp(48))
+            setMargins(0, 0, 0, 0)
         }
         root.addView(pageScroller, scrollerParams)
         pageScroller.bringToFront()

@@ -196,11 +196,9 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun showMoreMenu() {
-        val isDark = repository.isDarkTheme()
         val options = arrayOf(
             getString(R.string.about),
-            getString(R.string.reading_stats),
-            if (isDark) "Theme: Black (tap to switch to White)" else "Theme: White (tap to switch to Black)"
+            getString(R.string.reading_stats)
         )
         AlertDialog.Builder(this)
             .setTitle(getString(R.string.app_name))
@@ -208,17 +206,10 @@ class MainActivity : AppCompatActivity() {
                 when (which) {
                     0 -> showAbout()
                     1 -> showReadingStats()
-                    2 -> toggleTheme()
                 }
             }
             .setNegativeButton(R.string.cancel, null)
             .show()
-    }
-
-    private fun toggleTheme() {
-        val current = repository.isDarkTheme()
-        repository.setDarkTheme(!current)
-        Toast.makeText(this, if (!current) "Black theme activated" else "White theme activated", Toast.LENGTH_SHORT).show()
     }
 
     private fun showAbout() {

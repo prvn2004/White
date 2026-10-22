@@ -3,6 +3,13 @@
 All notable changes to White are documented in this file.
 This project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.3.1] - 2026-10-22
+
+### Changed
+- Reverted wood background and black theme per user request; the app retains its clean, pure white reading and library aesthetic.
+- Refined fast page scroller to span full screen height with dynamic bell curve animation on active position and drag.
+- Corrected text offset calculation during highlight replacement so color switches and additions apply instantly and cleanly without drift.
+
 ## [1.3.0] - 2026-10-22
 
 ### Added

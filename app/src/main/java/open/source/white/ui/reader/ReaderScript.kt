@@ -9,8 +9,7 @@ object ReaderScript {
         scroll: Float,
         progress: Int,
         fontSize: Int,
-        highlightsJson: String,
-        isDark: Boolean = false
+        highlightsJson: String
     ): String {
         return TEMPLATE
             .replace("__BRIDGE__", AppConstants.JS_BRIDGE_NAME)
@@ -22,13 +21,11 @@ object ReaderScript {
             .replace("__PROGRESS__", progress.toString())
             .replace("__FONT__", fontSize.toString())
             .replace("__HIGHLIGHTS__", JSONObject.quote(highlightsJson))
-            .replace("__DARK__", isDark.toString())
     }
 
     private val TEMPLATE = """
 (function () {
   if (window.__whiteReady) {
-    window.White.theme(__DARK__);
     window.White.fontSize(__FONT__);
     window.White.applyHighlights(__HIGHLIGHTS__);
     window.restorePosition(__SCROLL__, __PROGRESS__);
@@ -151,7 +148,19 @@ object ReaderScript {
       var range = document.createRange();
       range.selectNodeContents(root);
       range.setEnd(node, offset);
-      return range.toString().length;
+      var clone = range.cloneContents();
+      var div = document.createElement("div");
+      div.appendChild(clone);
+      var marks = div.querySelectorAll("mark.wh-hl");
+      for (var m = 0; m < marks.length; m++) {
+        var mark = marks[m];
+        var txt = document.createTextNode(mark.textContent);
+        if (mark.parentNode) {
+          mark.parentNode.replaceChild(txt, mark);
+          mark.parentNode.normalize();
+        }
+      }
+      return div.textContent.length;
     } catch (error) {
       return -1;
     }
@@ -202,27 +211,6 @@ object ReaderScript {
   });
 
   window.White = window.White || {};
-
-  window.White.theme = function (dark) {
-    var root = document.documentElement;
-    if (dark) {
-      root.style.setProperty("--wh-bg", "#000000");
-      root.style.setProperty("--wh-text", "#e5e7eb");
-      root.style.setProperty("--wh-heading", "#f3f4f6");
-      root.style.setProperty("--wh-divider", "#27272a");
-      root.style.setProperty("--wh-quote", "#9ca3af");
-      root.style.setProperty("--wh-link", "#60a5fa");
-      root.style.setProperty("--wh-pre-bg", "#18181b");
-    } else {
-      root.style.setProperty("--wh-bg", "#ffffff");
-      root.style.setProperty("--wh-text", "#18202c");
-      root.style.setProperty("--wh-heading", "#10233f");
-      root.style.setProperty("--wh-divider", "#e3ebf5");
-      root.style.setProperty("--wh-quote", "#44536b");
-      root.style.setProperty("--wh-link", "#2563eb");
-      root.style.setProperty("--wh-pre-bg", "#f6f8fb");
-    }
-  };
 
   window.White.getSelection = function () {
     return selectionInfo();
@@ -388,7 +376,6 @@ object ReaderScript {
     }
   }, true);
 
-  window.White.theme(__DARK__);
   window.White.fontSize(__FONT__);
   window.White.applyHighlights(__HIGHLIGHTS__);
   window.restorePosition(__SCROLL__, __PROGRESS__);

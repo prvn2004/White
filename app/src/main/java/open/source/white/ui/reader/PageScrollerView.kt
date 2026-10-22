@@ -1,5 +1,6 @@
 package open.source.white.ui.reader
 
+import android.animation.ValueAnimator
 import android.content.Context
 import android.graphics.Canvas
 import android.graphics.Color
@@ -8,6 +9,9 @@ import android.graphics.RectF
 import android.util.AttributeSet
 import android.view.MotionEvent
 import android.view.View
+import android.view.animation.OvershootInterpolator
+import kotlin.math.abs
+import kotlin.math.exp
 import kotlin.math.roundToInt
 
 class PageScrollerView @JvmOverloads constructor(
@@ -22,20 +26,22 @@ class PageScrollerView @JvmOverloads constructor(
     private var currentPage = 1
     private var totalPages = 1
     private var isDragging = false
+    private var animatedActiveRatio = 0f
+    private var animator: ValueAnimator? = null
 
     private val dashPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.parseColor("#806B7280")
+        color = Color.parseColor("#4D374151")
     }
     private val activeDashPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.parseColor("#2563EB")
     }
     private val bubbleBgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.parseColor("#E61E293B")
+        color = Color.parseColor("#F21E293B")
         style = Paint.Style.FILL
     }
     private val bubbleTextPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.WHITE
-        textSize = 12f * density
+        textSize = 12.5f * density
         textAlign = Paint.Align.CENTER
         isFakeBoldText = true
     }
@@ -44,49 +50,81 @@ class PageScrollerView @JvmOverloads constructor(
     fun update(page: Int, pages: Int) {
         currentPage = page.coerceAtLeast(1)
         totalPages = pages.coerceAtLeast(1)
-        invalidate()
+        val targetRatio = if (totalPages <= 1) 0f else (currentPage - 1).toFloat() / (totalPages - 1)
+        if (!isDragging) {
+            animateToRatio(targetRatio)
+        } else {
+            animatedActiveRatio = targetRatio
+            invalidate()
+        }
+    }
+
+    private fun animateToRatio(target: Float) {
+        animator?.cancel()
+        animator = ValueAnimator.ofFloat(animatedActiveRatio, target).apply {
+            duration = 180L
+            interpolator = OvershootInterpolator(0.6f)
+            addUpdateListener {
+                animatedActiveRatio = it.animatedValue as Float
+                invalidate()
+            }
+            start()
+        }
     }
 
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
         if (height <= 0 || width <= 0) return
 
-        val topY = 24f * density
-        val bottomY = height - 24f * density
-        val availableH = (bottomY - topY).coerceAtLeast(10f)
+        val topY = 32f * density
+        val bottomY = height.toFloat() - 32f * density
+        val availableH = (bottomY - topY).coerceAtLeast(20f)
 
-        val numDashes = 18
-        val dashW = 14f * density
-        val dashH = 3.5f * density
-        val dashRadius = 1.8f * density
-        val dashRight = width.toFloat() - 4f * density
-        val dashLeft = dashRight - dashW
-
-        val activeIndex = if (totalPages <= 1) 0 else {
-            ((currentPage - 1).toFloat() / (totalPages - 1) * (numDashes - 1)).roundToInt().coerceIn(0, numDashes - 1)
-        }
-
+        val numDashes = 28
         val step = availableH / (numDashes - 1)
+
+        val activeContinuousIndex = animatedActiveRatio * (numDashes - 1)
+        val baseDashW = 9f * density
+        val maxExtraW = 24f * density
+        val baseDashH = 2.8f * density
+        val maxDashH = 4.2f * density
+        val dashRight = width.toFloat() - 6f * density
+
         val rect = RectF()
         for (i in 0 until numDashes) {
             val centerY = topY + i * step
+            val dist = abs(i - activeContinuousIndex)
+            // Bell curve Gaussian falloff: exp(-0.5 * (dist / sigma)^2)
+            val sigma = 2.2f
+            val bell = exp(-0.5 * (dist / sigma) * (dist / sigma)).toFloat()
+
+            val dashW = baseDashW + bell * maxExtraW
+            val dashH = baseDashH + bell * (maxDashH - baseDashH)
+            val dashLeft = dashRight - dashW
+            val r = dashH / 2f
+
             rect.set(dashLeft, centerY - dashH / 2, dashRight, centerY + dashH / 2)
-            val paint = if (i == activeIndex) activeDashPaint else dashPaint
-            canvas.drawRoundRect(rect, dashRadius, dashRadius, paint)
+
+            if (bell > 0.75f) {
+                canvas.drawRoundRect(rect, r, r, activeDashPaint)
+            } else {
+                canvas.drawRoundRect(rect, r, r, dashPaint)
+            }
         }
 
         if (isDragging) {
-            val activeY = topY + activeIndex * step
-            val text = "$currentPage / $totalPages"
+            val activeY = topY + animatedActiveRatio * availableH
+            val text = "p. $currentPage / $totalPages"
             val textW = bubbleTextPaint.measureText(text)
-            val bubbleW = textW + 18f * density
-            val bubbleH = 28f * density
-            val bubbleRight = dashLeft - 8f * density
+            val bubbleW = textW + 20f * density
+            val bubbleH = 30f * density
+            val maxDashLeft = dashRight - (baseDashW + maxExtraW)
+            val bubbleRight = maxDashLeft - 10f * density
             val bubbleLeft = bubbleRight - bubbleW
             val bTop = (activeY - bubbleH / 2).coerceIn(8f * density, height - bubbleH - 8f * density)
             val bBottom = bTop + bubbleH
             bubbleRect.set(bubbleLeft, bTop, bubbleRight, bBottom)
-            canvas.drawRoundRect(bubbleRect, 8f * density, 8f * density, bubbleBgPaint)
+            canvas.drawRoundRect(bubbleRect, 10f * density, 10f * density, bubbleBgPaint)
 
             val fontMetrics = bubbleTextPaint.fontMetrics
             val baseline = bTop + (bubbleH - (fontMetrics.descent + fontMetrics.ascent)) / 2f
@@ -98,15 +136,14 @@ class PageScrollerView @JvmOverloads constructor(
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
                 isDragging = true
+                animator?.cancel()
                 parent?.requestDisallowInterceptTouchEvent(true)
                 handleTouchY(event.y)
-                invalidate()
                 return true
             }
             MotionEvent.ACTION_MOVE -> {
                 if (isDragging) {
                     handleTouchY(event.y)
-                    invalidate()
                     return true
                 }
             }
@@ -114,7 +151,6 @@ class PageScrollerView @JvmOverloads constructor(
                 if (isDragging) {
                     isDragging = false
                     handleTouchY(event.y)
-                    invalidate()
                     return true
                 }
             }
@@ -123,16 +159,17 @@ class PageScrollerView @JvmOverloads constructor(
     }
 
     private fun handleTouchY(touchY: Float) {
-        val topY = 24f * density
-        val bottomY = height - 24f * density
-        val availableH = (bottomY - topY).coerceAtLeast(10f)
+        val topY = 32f * density
+        val bottomY = height.toFloat() - 32f * density
+        val availableH = (bottomY - topY).coerceAtLeast(20f)
         val clampedY = touchY.coerceIn(topY, bottomY)
         val ratio = (clampedY - topY) / availableH
-        val selected = 1 + (ratio * (totalPages - 1)).roundToInt()
-        val page = selected.coerceIn(1, totalPages.coerceAtLeast(1))
+        animatedActiveRatio = ratio
+        val page = (1 + ratio * (totalPages - 1)).roundToInt().coerceIn(1, totalPages.coerceAtLeast(1))
         if (page != currentPage) {
             currentPage = page
             onPageSelected?.invoke(page)
         }
+        invalidate()
     }
 }
